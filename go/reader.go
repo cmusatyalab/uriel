@@ -1,7 +1,7 @@
-package gabriel
+package uriel
 
 // #include <stdlib.h>
-// #include <gabriel/gabriel.h>
+// #include <uriel/uriel.h>
 import "C"
 
 import (
@@ -33,7 +33,7 @@ type ReadInput struct {
 // A Reader must be used and closed in the goroutine that created it (see Threads in the package
 // documentation).
 type Reader struct {
-	handle *C.gabriel_reader_t
+	handle *C.uriel_reader_t
 	thread thread
 }
 
@@ -44,7 +44,7 @@ func NewReader(name string) (*Reader, error) {
 	defer C.free(unsafe.Pointer(cName))
 	t := lockThread()
 	r := &Reader{thread: t}
-	err := call(func() C.gabriel_status_t { return C.gabriel_reader_create(cName, &r.handle) })
+	err := call(func() C.uriel_status_t { return C.uriel_reader_create(cName, &r.handle) })
 	if err != nil {
 		t.release()
 		return nil, err
@@ -65,7 +65,7 @@ func (r *Reader) Wait(timeout time.Duration) error {
 	if err := r.check(); err != nil {
 		return err
 	}
-	return call(func() C.gabriel_status_t { return C.gabriel_reader_wait(r.handle, milliseconds(timeout)) })
+	return call(func() C.uriel_status_t { return C.uriel_reader_wait(r.handle, milliseconds(timeout)) })
 }
 
 // Poll returns the next input, or fails with [ErrAgain] if none is available. Its Data stays valid
@@ -74,8 +74,8 @@ func (r *Reader) Poll() (ReadInput, error) {
 	if err := r.check(); err != nil {
 		return ReadInput{}, err
 	}
-	var view C.gabriel_read_input_t
-	if err := call(func() C.gabriel_status_t { return C.gabriel_reader_poll(r.handle, &view) }); err != nil {
+	var view C.uriel_read_input_t
+	if err := call(func() C.uriel_status_t { return C.uriel_reader_poll(r.handle, &view) }); err != nil {
 		return ReadInput{}, err
 	}
 	return ReadInput{
@@ -97,7 +97,7 @@ func (r *Reader) Close() error {
 	if err := r.check(); err != nil {
 		return err
 	}
-	err := call(func() C.gabriel_status_t { return C.gabriel_reader_destroy(r.handle) })
+	err := call(func() C.uriel_status_t { return C.uriel_reader_destroy(r.handle) })
 	r.handle = nil
 	r.thread.release()
 	return err

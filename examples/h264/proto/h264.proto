@@ -5,7 +5,7 @@
 // The messages the H.264 encoder and decoder engines exchange.
 syntax = "proto3";
 
-package gabriel.examples.h264.v1;
+package uriel.examples.h264.v1;
 
 // One frame, encoded: what the encoder emits and the decoder takes.
 message EncodedVideoFrame {

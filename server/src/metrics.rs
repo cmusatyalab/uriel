@@ -2,14 +2,14 @@
 //! each engine's events, which the server publishes on this machine, so they need no help from
 //! the engines, and all their times are on this machine's clock:
 //!
-//! - `gabriel_engine_inputs_received_total`: inputs sent to the engine.
-//! - `gabriel_engine_outcomes_total`, by `outcome`: how the engine's offers ended, `result`,
+//! - `uriel_engine_inputs_received_total`: inputs sent to the engine.
+//! - `uriel_engine_outcomes_total`, by `outcome`: how the engine's offers ended, `result`,
 //!   `skipped` (replaced by a newer input before it was sent) or `timed_out`.
-//! - `gabriel_engine_processing_latency_seconds`: from sending an input to the engine to its
+//! - `uriel_engine_processing_latency_seconds`: from sending an input to the engine to its
 //!   result.
-//! - `gabriel_engine_wait_seconds`: from the offer to sending the input, i.e. how long the input
+//! - `uriel_engine_wait_seconds`: from the offer to sending the input, i.e. how long the input
 //!   waited for the engine to be free.
-//! - `gabriel_events_lost_total`: events this server's watcher missed, so the counts above are
+//! - `uriel_events_lost_total`: events this server's watcher missed, so the counts above are
 //!   short by up to that many.
 //!
 //! Each has an `engine_id` label, as in the Python Gabriel server.
@@ -25,11 +25,11 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use gabriel::{
+use metrics::{counter, histogram};
+use uriel::{
     EventKind, InputId, Subscription, Timestamp,
     subscription::{Event, Published},
 };
-use metrics::{counter, histogram};
 
 /// How long a watcher waits for an event before it checks whether to stop.
 const STOP_CHECK_INTERVAL: Duration = Duration::from_millis(500);
@@ -62,17 +62,17 @@ fn watch_engine(engine: &str, stop: &AtomicBool) -> Result<()> {
     while !stop.load(Ordering::Relaxed) {
         match events.wait(STOP_CHECK_INTERVAL) {
             Ok(()) => {}
-            Err(gabriel::Error::Again) => continue,
+            Err(uriel::Error::Again) => continue,
             Err(e) => return Err(e).context("failed to wait for an event"),
         }
         loop {
             match events.poll() {
                 Ok(Event::Published(event)) => record(engine, &event, &mut sent_at),
                 Ok(Event::Lost(lost)) => {
-                    counter!("gabriel_events_lost_total", "engine_id" => engine.to_owned())
+                    counter!("uriel_events_lost_total", "engine_id" => engine.to_owned())
                         .increment(lost.count());
                 }
-                Err(gabriel::Error::Again) => break,
+                Err(uriel::Error::Again) => break,
                 Err(e) => return Err(e).context("failed to read an event"),
             }
         }
@@ -85,10 +85,10 @@ fn record(engine: &str, event: &Published, sent_at: &mut SentTimes) {
     let engine = engine.to_owned();
     let outcome = match event.kind() {
         EventKind::Sent => {
-            counter!("gabriel_engine_inputs_received_total", "engine_id" => engine.clone())
+            counter!("uriel_engine_inputs_received_total", "engine_id" => engine.clone())
                 .increment(1);
             if let Some(offered_at) = event.offered_at() {
-                histogram!("gabriel_engine_wait_seconds", "engine_id" => engine)
+                histogram!("uriel_engine_wait_seconds", "engine_id" => engine)
                     .record(event.at().saturating_duration_since(offered_at));
             }
             sent_at.insert(offer_key(event), event.at());
@@ -96,7 +96,7 @@ fn record(engine: &str, event: &Published, sent_at: &mut SentTimes) {
         }
         EventKind::Result => {
             if let Some(sent) = sent_at.remove(&offer_key(event)) {
-                histogram!("gabriel_engine_processing_latency_seconds", "engine_id" => engine.clone())
+                histogram!("uriel_engine_processing_latency_seconds", "engine_id" => engine.clone())
                     .record(event.at().saturating_duration_since(sent));
             }
             "result"
@@ -106,7 +106,7 @@ fn record(engine: &str, event: &Published, sent_at: &mut SentTimes) {
         // A derived result answers no offer, and the rest are not about an engine's offers.
         _ => return,
     };
-    counter!("gabriel_engine_outcomes_total", "engine_id" => engine, "outcome" => outcome)
+    counter!("uriel_engine_outcomes_total", "engine_id" => engine, "outcome" => outcome)
         .increment(1);
 }
 

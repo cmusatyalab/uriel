@@ -2,7 +2,7 @@
 
 from collections.abc import Iterator
 
-from gabriel._ffi import (
+from uriel._ffi import (
     ThreadHandle,
     bytes_arg,
     check,
@@ -15,8 +15,8 @@ from gabriel._ffi import (
     release,
     view,
 )
-from gabriel.errors import AgainError
-from gabriel.types import Event, Input, InputId
+from uriel.errors import AgainError
+from uriel.types import Event, Input, InputId
 
 
 class Engine(ThreadHandle):
@@ -34,13 +34,13 @@ class Engine(ThreadHandle):
         """Creates the engine `name`. `result_type` names how to read its results, e.g. a protobuf
         message name. An output and its result are together at most `max_output_size` bytes."""
         handle = create(
-            lib.gabriel_engine_create,
-            "gabriel_engine_t **",
+            lib.uriel_engine_create,
+            "uriel_engine_t **",
             cstr(name),
             cstr(result_type),
             max_output_size,
         )
-        super().__init__(handle, lib.gabriel_engine_destroy)
+        super().__init__(handle, lib.uriel_engine_destroy)
         self._max_output_size = max_output_size
         self._input: Input | None = None
 
@@ -49,16 +49,16 @@ class Engine(ThreadHandle):
         Returns whether one may be ready: a wake-up with neither is possible, so poll in a loop,
         or use `next` for an engine without subscriptions."""
         try:
-            check(lib.gabriel_engine_wait(self._live(), milliseconds(timeout)))
+            check(lib.uriel_engine_wait(self._live(), milliseconds(timeout)))
         except AgainError:
             return False
         return True
 
     def poll(self) -> Input | None:
         """Returns the next input, or None if none is available."""
-        out = ffi.new("gabriel_input_t *")
+        out = ffi.new("uriel_input_t *")
         try:
-            check(lib.gabriel_engine_poll_input(self._live(), out))
+            check(lib.uriel_engine_poll_input(self._live(), out))
         except AgainError:
             return None
         self._input = Input(
@@ -77,14 +77,14 @@ class Engine(ThreadHandle):
     def subscribe(self, name: str) -> None:
         """Subscribes the engine to the events of the engine `name`, e.g. a detector whose results
         it fuses. Only events published from now on are read. `wait` ends for them too."""
-        check(lib.gabriel_engine_subscribe(self._live(), cstr(name)))
+        check(lib.uriel_engine_subscribe(self._live(), cstr(name)))
 
     def poll_event(self) -> Event | None:
         """Returns the next event of any subscription, or None if none is available. Its `engine`
         says which subscription it came from."""
-        out = ffi.new("gabriel_event_t *")
+        out = ffi.new("uriel_event_t *")
         try:
-            check(lib.gabriel_engine_poll_event(self._live(), out))
+            check(lib.uriel_engine_poll_event(self._live(), out))
         except AgainError:
             return None
         return Event._from_c(out)
@@ -104,9 +104,9 @@ class Engine(ThreadHandle):
         engine's event service."""
         # Kept alive until the call returns, since the struct only points to it.
         producer = ffi.new("char[]", id.producer.encode())
-        c_id = ffi.new("gabriel_input_id_t *", (producer, id.session, id.seq))
+        c_id = ffi.new("uriel_input_id_t *", (producer, id.session, id.seq))
         check(
-            lib.gabriel_engine_publish_derived(
+            lib.uriel_engine_publish_derived(
                 self._live(), c_id, cstr(flow), cstr(result_type), *bytes_arg(result)
             )
         )
@@ -114,11 +114,11 @@ class Engine(ThreadHandle):
     def drop(self, *, result=b"") -> None:
         """Reports that the engine drops the input: it forwards nothing. `result` still goes to
         the subscribers. A discard is a drop with no result."""
-        self._report(lib.gabriel_engine_drop, result)
+        self._report(lib.uriel_engine_drop, result)
 
     def forward(self, *, result=b"") -> None:
         """Reports that the engine forwards the input unchanged along every outgoing edge."""
-        self._report(lib.gabriel_engine_forward, result)
+        self._report(lib.uriel_engine_forward, result)
 
     def _report(self, function, result) -> None:
         handle = self._live()
@@ -129,7 +129,7 @@ class Engine(ThreadHandle):
         """Returns a buffer in shared memory for a new input, of the engine's maximum output size.
         Write the input into it, then forward it with `replace`."""
         out = ffi.new("uint8_t **")
-        check(lib.gabriel_engine_new_output(self._live(), out))
+        check(lib.uriel_engine_new_output(self._live(), out))
         return view(out[0], self._max_output_size, writable=True)
 
     def replace(self, length: int, *, output_type: str | None = None, result=b"") -> None:
@@ -138,7 +138,7 @@ class Engine(ThreadHandle):
         `output_type` names how to read it."""
         handle = self._live()
         self._release_input()
-        check(lib.gabriel_engine_replace(handle, cstr(output_type), length, *bytes_arg(result)))
+        check(lib.uriel_engine_replace(handle, cstr(output_type), length, *bytes_arg(result)))
 
     def _release_input(self) -> None:
         """Releases the input's bytes, which the outcome hands back to the server."""

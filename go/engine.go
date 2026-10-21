@@ -1,7 +1,7 @@
-package gabriel
+package uriel
 
 // #include <stdlib.h>
-// #include <gabriel/gabriel.h>
+// #include <uriel/uriel.h>
 import "C"
 
 import (
@@ -32,7 +32,7 @@ type Input struct {
 // An Engine must be used and closed in the goroutine that created it (see Threads in the package
 // documentation).
 type Engine struct {
-	handle        *C.gabriel_engine_t
+	handle        *C.uriel_engine_t
 	thread        thread
 	maxOutputSize int
 }
@@ -50,8 +50,8 @@ func NewEngine(name, resultType string, maxOutputSize int) (*Engine, error) {
 	}
 	t := lockThread()
 	e := &Engine{thread: t, maxOutputSize: maxOutputSize}
-	err := call(func() C.gabriel_status_t {
-		return C.gabriel_engine_create(cName, cResultType, C.size_t(maxOutputSize), &e.handle)
+	err := call(func() C.uriel_status_t {
+		return C.uriel_engine_create(cName, cResultType, C.size_t(maxOutputSize), &e.handle)
 	})
 	if err != nil {
 		t.release()
@@ -75,7 +75,7 @@ func (e *Engine) Wait(timeout time.Duration) error {
 	if err := e.check(); err != nil {
 		return err
 	}
-	return call(func() C.gabriel_status_t { return C.gabriel_engine_wait(e.handle, milliseconds(timeout)) })
+	return call(func() C.uriel_status_t { return C.uriel_engine_wait(e.handle, milliseconds(timeout)) })
 }
 
 // Poll returns the next input, or fails with [ErrAgain] if none is available.
@@ -83,8 +83,8 @@ func (e *Engine) Poll() (Input, error) {
 	if err := e.check(); err != nil {
 		return Input{}, err
 	}
-	var view C.gabriel_input_t
-	if err := call(func() C.gabriel_status_t { return C.gabriel_engine_poll_input(e.handle, &view) }); err != nil {
+	var view C.uriel_input_t
+	if err := call(func() C.uriel_status_t { return C.uriel_engine_poll_input(e.handle, &view) }); err != nil {
 		return Input{}, err
 	}
 	return Input{
@@ -108,7 +108,7 @@ func (e *Engine) Subscribe(name string) error {
 	}
 	cName := C.CString(name)
 	defer C.free(unsafe.Pointer(cName))
-	return call(func() C.gabriel_status_t { return C.gabriel_engine_subscribe(e.handle, cName) })
+	return call(func() C.uriel_status_t { return C.uriel_engine_subscribe(e.handle, cName) })
 }
 
 // PollEvent returns the next event of any subscription, or fails with [ErrAgain] if none is
@@ -117,8 +117,8 @@ func (e *Engine) PollEvent() (Event, error) {
 	if err := e.check(); err != nil {
 		return Event{}, err
 	}
-	var view C.gabriel_event_t
-	if err := call(func() C.gabriel_status_t { return C.gabriel_engine_poll_event(e.handle, &view) }); err != nil {
+	var view C.uriel_event_t
+	if err := call(func() C.uriel_status_t { return C.uriel_engine_poll_event(e.handle, &view) }); err != nil {
 		return Event{}, err
 	}
 	return eventOf(&view), nil
@@ -156,7 +156,7 @@ func (e *Engine) PublishDerived(id InputID, flow, resultType string, result []by
 	}
 	cProducer := C.CString(id.Producer)
 	defer C.free(unsafe.Pointer(cProducer))
-	cID := C.gabriel_input_id_t{producer: cProducer, session: C.uint64_t(id.Session), seq: C.uint64_t(id.Seq)}
+	cID := C.uriel_input_id_t{producer: cProducer, session: C.uint64_t(id.Session), seq: C.uint64_t(id.Seq)}
 	cFlow := C.CString(flow)
 	defer C.free(unsafe.Pointer(cFlow))
 	var cResultType *C.char
@@ -165,32 +165,32 @@ func (e *Engine) PublishDerived(id InputID, flow, resultType string, result []by
 		defer C.free(unsafe.Pointer(cResultType))
 	}
 	buf, n := bytesArg(result)
-	return call(func() C.gabriel_status_t {
-		return C.gabriel_engine_publish_derived(e.handle, &cID, cFlow, cResultType, buf, n)
+	return call(func() C.uriel_status_t {
+		return C.uriel_engine_publish_derived(e.handle, &cID, cFlow, cResultType, buf, n)
 	})
 }
 
 // Drop reports that the engine drops the input: it forwards nothing. A discard is a drop with no
 // result.
 func (e *Engine) Drop(result []byte) error {
-	return e.report(result, func(buf *C.uint8_t, n C.size_t) C.gabriel_status_t {
-		return C.gabriel_engine_drop(e.handle, buf, n)
+	return e.report(result, func(buf *C.uint8_t, n C.size_t) C.uriel_status_t {
+		return C.uriel_engine_drop(e.handle, buf, n)
 	})
 }
 
 // Forward reports that the engine forwards the input unchanged along every outgoing edge.
 func (e *Engine) Forward(result []byte) error {
-	return e.report(result, func(buf *C.uint8_t, n C.size_t) C.gabriel_status_t {
-		return C.gabriel_engine_forward(e.handle, buf, n)
+	return e.report(result, func(buf *C.uint8_t, n C.size_t) C.uriel_status_t {
+		return C.uriel_engine_forward(e.handle, buf, n)
 	})
 }
 
-func (e *Engine) report(result []byte, send func(*C.uint8_t, C.size_t) C.gabriel_status_t) error {
+func (e *Engine) report(result []byte, send func(*C.uint8_t, C.size_t) C.uriel_status_t) error {
 	if err := e.check(); err != nil {
 		return err
 	}
 	buf, n := bytesArg(result)
-	return call(func() C.gabriel_status_t { return send(buf, n) })
+	return call(func() C.uriel_status_t { return send(buf, n) })
 }
 
 // Loan returns a buffer in shared memory for a new input, of the engine's maximum output size.
@@ -200,7 +200,7 @@ func (e *Engine) Loan() ([]byte, error) {
 		return nil, err
 	}
 	var buf *C.uint8_t
-	if err := call(func() C.gabriel_status_t { return C.gabriel_engine_new_output(e.handle, &buf) }); err != nil {
+	if err := call(func() C.uriel_status_t { return C.uriel_engine_new_output(e.handle, &buf) }); err != nil {
 		return nil, err
 	}
 	return unsafe.Slice((*byte)(unsafe.Pointer(buf)), e.maxOutputSize), nil
@@ -219,8 +219,8 @@ func (e *Engine) Replace(outputType string, n int, result []byte) error {
 		defer C.free(unsafe.Pointer(cOutputType))
 	}
 	buf, resultLen := bytesArg(result)
-	return call(func() C.gabriel_status_t {
-		return C.gabriel_engine_replace(e.handle, cOutputType, C.size_t(n), buf, resultLen)
+	return call(func() C.uriel_status_t {
+		return C.uriel_engine_replace(e.handle, cOutputType, C.size_t(n), buf, resultLen)
 	})
 }
 
@@ -229,7 +229,7 @@ func (e *Engine) Close() error {
 	if err := e.check(); err != nil {
 		return err
 	}
-	err := call(func() C.gabriel_status_t { return C.gabriel_engine_destroy(e.handle) })
+	err := call(func() C.uriel_status_t { return C.uriel_engine_destroy(e.handle) })
 	e.handle = nil
 	e.thread.release()
 	return err

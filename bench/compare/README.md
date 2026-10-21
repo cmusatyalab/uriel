@@ -1,10 +1,10 @@
 # Comparing with the old Gabriel
 
-This measures how much each Gabriel itself costs when everything runs on one
-machine. An app sends a raw RGB frame, an engine answers it at once with 256
-bytes, and the app sends the next frame when the answer arrives. One frame is
-in flight at a time (one token). The engine does no work, so the round trip is
-all framework: copies, serialization, wake-ups.
+This measures how much Uriel and the old Gabriel themselves cost when
+everything runs on one machine. An app sends a raw RGB frame, an engine answers
+it at once with 256 bytes, and the app sends the next frame when the answer
+arrives. One frame is in flight at a time (one token). The engine does no work,
+so the round trip is all framework: copies, serialization, wake-ups.
 
 | System                       | App to server                 | Server to engine |
 | ---------------------------- | ----------------------------- | ---------------- |
@@ -20,7 +20,7 @@ frames are 720p, 1080p and 4K (2.8, 6.2 and 24.9 MB).
 ## Running it
 
 ```sh
-cargo build --release -p gabriel              # from the repository root
+cargo build --release -p uriel                # from the repository root
 pip install -r requirements.txt               # from this directory
 python compare.py                             # or e.g. --systems new old-ipc --resolutions 4k
 ```
@@ -47,8 +47,8 @@ It prints a table and saves it, with every round trip, under
 ## What it found
 
 The results, on one machine, are in `docs/evaluation.tex` ("Comparison with
-the original Gabriel"). One finding is about the new Gabriel itself: **most of
-its round trip is spent copying the frame.** On the local path, Gabriel copies
+the original Gabriel"). One finding is about Uriel itself: **most of
+its round trip is spent copying the frame.** On the local path, Uriel copies
 each frame four times:
 
 | Process | Where                                                | Copy                                      |

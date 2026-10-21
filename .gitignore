@@ -19,4 +19,4 @@ bench-results/
 *.toc
 *.pdf
 
-python/src/gabriel/_native
+python/src/uriel/_native

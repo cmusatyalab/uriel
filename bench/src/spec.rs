@@ -8,10 +8,10 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail, ensure};
-use gabriel::{FlowSpec, client::DEFAULT_REMOTE_CROSSING_CAPACITY, spec::Location};
 use rand::{Rng, distr::Uniform};
 use rand_distr::{Distribution, Exp, LogNormal};
 use serde::Deserialize;
+use uriel::{FlowSpec, client::DEFAULT_REMOTE_CROSSING_CAPACITY, spec::Location};
 
 /// One benchmark run.
 #[derive(Debug, Deserialize)]
@@ -46,7 +46,7 @@ pub struct RunSpec {
 pub struct RemoteSettings {
     /// How many inputs each crossing to the remote server may have in flight.
     pub crossing_capacity: usize,
-    /// The address of a remote server that is already running, e.g. one `gabriel-server` runs on
+    /// The address of a remote server that is already running, e.g. one `uriel-server` runs on
     /// another machine, as "host:port". Its engines are external. Without it, the bench runs
     /// the remote server itself, on loopback.
     pub addr: Option<String>,

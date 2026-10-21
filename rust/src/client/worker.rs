@@ -46,7 +46,7 @@ use crate::{
         server_link::{ServerEvent, ServerLink},
     },
     ipc::types::{Data, EngineName, EventKind, EventRecord, FlowName, Outcome},
-    metrics as gabriel_metrics, naming,
+    metrics as uriel_metrics, naming,
     routing::{
         flow::{FlowRouter, RouterAction},
         ids::{EdgeId, NodeId, ProducerName},
@@ -141,8 +141,8 @@ impl FlowMetrics {
                     ("flow", flow.to_owned()),
                     ("producer_id", producer.as_str().to_owned()),
                 ];
-                gauge!(gabriel_metrics::TOKENS, &labels).set(tokens as f64);
-                (*producer, gauge!(gabriel_metrics::TOKENS_IN_USE, &labels))
+                gauge!(uriel_metrics::TOKENS, &labels).set(tokens as f64);
+                (*producer, gauge!(uriel_metrics::TOKENS_IN_USE, &labels))
             })
             .collect();
         let crossings_in_flight = crossings
@@ -158,8 +158,8 @@ impl FlowMetrics {
                     ("location", location.to_owned()),
                     ("targets", targets.join(",")),
                 ];
-                gauge!(gabriel_metrics::CROSSING_CAPACITY, &labels).set(capacity as f64);
-                (edge, gauge!(gabriel_metrics::CROSSING_IN_FLIGHT, &labels))
+                gauge!(uriel_metrics::CROSSING_CAPACITY, &labels).set(capacity as f64);
+                (edge, gauge!(uriel_metrics::CROSSING_IN_FLIGHT, &labels))
             })
             .collect();
         Self {
@@ -216,7 +216,7 @@ pub(super) fn spawn(
     let (command_tx, command_rx) = mpsc::channel();
     let (name, local_server) = (name.to_owned(), local_server.to_owned());
     let thread = thread::Builder::new()
-        .name(format!("gabriel-client-{name}"))
+        .name(format!("uriel-client-{name}"))
         .spawn(move || {
             // Every event the thread logs names the client.
             let _span = info_span!("client", name = %name).entered();

@@ -1,6 +1,6 @@
-"""Loads Gabriel's C library, and turns its status codes into exceptions.
+"""Loads Uriel's C library, and turns its status codes into exceptions.
 
-The library and its declarations are in ``gabriel._native``, which maturin builds from the Rust
+The library and its declarations are in ``uriel._native``, which maturin builds from the Rust
 crate along with the package, so the two always match.
 """
 
@@ -9,22 +9,22 @@ import threading
 import time
 from contextlib import contextmanager
 
-from gabriel._native import ffi, lib
-from gabriel.errors import (
+from uriel._native import ffi, lib
+from uriel.errors import (
     AgainError,
     ClosedError,
-    GabrielError,
     InternalError,
     InvalidArgumentError,
     SizeExceededError,
+    UrielError,
     WrongThreadError,
 )
 
-_ERRORS: dict[int, type[GabrielError]] = {
-    lib.GABRIEL_STATUS_T_ERR_INVALID: InvalidArgumentError,
-    lib.GABRIEL_STATUS_T_ERR_SIZE_EXCEEDED: SizeExceededError,
-    lib.GABRIEL_STATUS_T_ERR_AGAIN: AgainError,
-    lib.GABRIEL_STATUS_T_ERR_INTERNAL: InternalError,
+_ERRORS: dict[int, type[UrielError]] = {
+    lib.URIEL_STATUS_T_ERR_INVALID: InvalidArgumentError,
+    lib.URIEL_STATUS_T_ERR_SIZE_EXCEEDED: SizeExceededError,
+    lib.URIEL_STATUS_T_ERR_AGAIN: AgainError,
+    lib.URIEL_STATUS_T_ERR_INTERNAL: InternalError,
 }
 
 # The longest wait the C ABI takes, in milliseconds.
@@ -38,9 +38,9 @@ def check(status: int) -> None:
     A Python thread stays on one OS thread, so the message read here is the one of the call that
     just failed on this thread.
     """
-    if status == lib.GABRIEL_STATUS_T_OK:
+    if status == lib.URIEL_STATUS_T_OK:
         return
-    message = ffi.string(lib.gabriel_last_error()).decode()
+    message = ffi.string(lib.uriel_last_error()).decode()
     raise _ERRORS.get(status, InternalError)(message)
 
 
@@ -169,8 +169,8 @@ def create(function, out_type: str, *args):
 @contextmanager
 def options(kind: str):
     """The C ABI's options of `kind` ("client" or "server"), destroyed on leaving the block."""
-    handle = create(getattr(lib, f"gabriel_{kind}_options_create"), f"gabriel_{kind}_options_t **")
+    handle = create(getattr(lib, f"uriel_{kind}_options_create"), f"uriel_{kind}_options_t **")
     try:
         yield handle
     finally:
-        getattr(lib, f"gabriel_{kind}_options_destroy")(handle)
+        getattr(lib, f"uriel_{kind}_options_destroy")(handle)

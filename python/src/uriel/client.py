@@ -2,8 +2,8 @@
 
 from dataclasses import dataclass
 
-from gabriel._ffi import LockedHandle, bytes_arg, check, create, cstr, lib, options
-from gabriel.errors import InvalidArgumentError
+from uriel._ffi import LockedHandle, bytes_arg, check, create, cstr, lib, options
+from uriel.errors import InvalidArgumentError
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,7 +32,7 @@ class Client(LockedHandle):
         with options("client") as opts:
             if remote is not None:
                 check(
-                    lib.gabriel_client_options_set_remote_server(
+                    lib.uriel_client_options_set_remote_server(
                         opts, cstr(remote.addr), *bytes_arg(remote.certificate)
                     )
                 )
@@ -40,26 +40,26 @@ class Client(LockedHandle):
                     if remote.crossing_capacity < 0:
                         raise InvalidArgumentError("negative crossing capacity")
                     check(
-                        lib.gabriel_client_options_set_remote_crossing_capacity(
+                        lib.uriel_client_options_set_remote_crossing_capacity(
                             opts, remote.crossing_capacity
                         )
                     )
             handle = create(
-                lib.gabriel_client_create,
-                "gabriel_client_t **",
+                lib.uriel_client_create,
+                "uriel_client_t **",
                 cstr(name),
                 cstr(local_server),
                 opts,
             )
-        super().__init__(handle, lib.gabriel_client_destroy)
+        super().__init__(handle, lib.uriel_client_destroy)
 
     def add_producer(self, name: str) -> None:
         """Takes the inputs of the producer `name`."""
-        self._call(lib.gabriel_client_add_producer, cstr(name))
+        self._call(lib.uriel_client_add_producer, cstr(name))
 
     def remove_producer(self, name: str) -> None:
         """Stops taking the inputs of the producer `name`. It fails while a flow uses it."""
-        self._call(lib.gabriel_client_remove_producer, cstr(name))
+        self._call(lib.uriel_client_remove_producer, cstr(name))
 
     def add_flow(self, name: str, spec: str) -> None:
         """Adds the flow `name`. `spec` describes it in TOML: its producers, its engines and where
@@ -81,8 +81,8 @@ class Client(LockedHandle):
         The client must take the inputs of every producer (`add_producer`), and a server must serve
         every engine (`Server.add_engine`).
         """
-        self._call(lib.gabriel_client_add_flow, cstr(name), cstr(spec))
+        self._call(lib.uriel_client_add_flow, cstr(name), cstr(spec))
 
     def remove_flow(self, name: str) -> None:
         """Removes the flow `name`."""
-        self._call(lib.gabriel_client_remove_flow, cstr(name))
+        self._call(lib.uriel_client_remove_flow, cstr(name))

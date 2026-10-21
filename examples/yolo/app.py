@@ -13,8 +13,8 @@ import signal
 import time
 
 import cv2
-import gabriel
 import numpy as np
+import uriel
 from common import (
     CHANNELS,
     ENGINE,
@@ -60,7 +60,7 @@ def read_frame(video: cv2.VideoCapture, source: str) -> np.ndarray:
     return frame
 
 
-def describe(event: gabriel.Event, published: dict[int, int]) -> str:
+def describe(event: uriel.Event, published: dict[int, int]) -> str:
     """What the detector found in a frame, and how old the frame is now."""
     objects = json.loads(event.result)
     labels = ", ".join(f"{o['label']} {o['confidence']:.0%}" for o in objects)
@@ -83,9 +83,9 @@ video = cv2.VideoCapture(
 signal.signal(signal.SIGTERM, signal.default_int_handler)
 
 with (
-    gabriel.Producer(PRODUCER, max_input_size=FRAME_SIZE) as camera,
-    gabriel.Subscription.producer(PRODUCER) as events,
-    gabriel.Client("yolo-app", SERVER) as client,
+    uriel.Producer(PRODUCER, max_input_size=FRAME_SIZE) as camera,
+    uriel.Subscription.producer(PRODUCER) as events,
+    uriel.Client("yolo-app", SERVER) as client,
     contextlib.suppress(KeyboardInterrupt),
 ):
     client.add_producer(PRODUCER)
@@ -106,7 +106,7 @@ with (
         while (
             event := events.next(max(deadline - time.monotonic(), 0))
         ) is not None:
-            if event.kind == gabriel.EventKind.RESULT:
+            if event.kind == uriel.EventKind.RESULT:
                 print(describe(event, published), flush=True)
                 # Older frames get no result any more.
                 published = {

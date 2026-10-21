@@ -2,7 +2,7 @@
 
 from collections.abc import Iterator
 
-from gabriel._ffi import (
+from uriel._ffi import (
     ThreadHandle,
     check,
     create,
@@ -14,8 +14,8 @@ from gabriel._ffi import (
     release,
     view,
 )
-from gabriel.errors import AgainError
-from gabriel.types import InputId, ReadInput
+from uriel.errors import AgainError
+from uriel.types import InputId, ReadInput
 
 
 class Reader(ThreadHandle):
@@ -33,15 +33,15 @@ class Reader(ThreadHandle):
 
     def __init__(self, name: str) -> None:
         """Reads the inputs of the producer `name`. The producer need not exist yet."""
-        handle = create(lib.gabriel_reader_create, "gabriel_reader_t **", cstr(name))
-        super().__init__(handle, lib.gabriel_reader_destroy)
+        handle = create(lib.uriel_reader_create, "uriel_reader_t **", cstr(name))
+        super().__init__(handle, lib.uriel_reader_destroy)
         self._input: ReadInput | None = None
 
     def wait(self, timeout: float) -> bool:
         """Waits until an input is ready, or `timeout` seconds pass. Returns whether it may be
         ready."""
         try:
-            check(lib.gabriel_reader_wait(self._live(), milliseconds(timeout)))
+            check(lib.uriel_reader_wait(self._live(), milliseconds(timeout)))
         except AgainError:
             return False
         return True
@@ -51,9 +51,9 @@ class Reader(ThreadHandle):
         next poll."""
         handle = self._live()
         self._release_input()
-        out = ffi.new("gabriel_read_input_t *")
+        out = ffi.new("uriel_read_input_t *")
         try:
-            check(lib.gabriel_reader_poll(handle, out))
+            check(lib.uriel_reader_poll(handle, out))
         except AgainError:
             return None
         self._input = ReadInput(

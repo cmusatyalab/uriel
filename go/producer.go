@@ -1,7 +1,7 @@
-package gabriel
+package uriel
 
 // #include <stdlib.h>
-// #include <gabriel/gabriel.h>
+// #include <uriel/uriel.h>
 import "C"
 
 import (
@@ -15,7 +15,7 @@ import (
 // A Producer must be used and closed in the goroutine that created it (see Threads in the package
 // documentation).
 type Producer struct {
-	handle       *C.gabriel_producer_t
+	handle       *C.uriel_producer_t
 	thread       thread
 	maxInputSize int
 	session      uint64
@@ -35,15 +35,15 @@ func NewProducer(name, inputType string, maxInputSize int) (*Producer, error) {
 	}
 	t := lockThread()
 	p := &Producer{thread: t, maxInputSize: maxInputSize}
-	err := call(func() C.gabriel_status_t {
-		return C.gabriel_producer_create(cName, cInputType, C.size_t(maxInputSize), &p.handle)
+	err := call(func() C.uriel_status_t {
+		return C.uriel_producer_create(cName, cInputType, C.size_t(maxInputSize), &p.handle)
 	})
 	if err != nil {
 		t.release()
 		return nil, err
 	}
 	var session C.uint64_t
-	if err := call(func() C.gabriel_status_t { return C.gabriel_producer_session(p.handle, &session) }); err != nil {
+	if err := call(func() C.uriel_status_t { return C.uriel_producer_session(p.handle, &session) }); err != nil {
 		p.Close()
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func (p *Producer) Loan() ([]byte, error) {
 		return nil, err
 	}
 	var buf *C.uint8_t
-	err := call(func() C.gabriel_status_t { return C.gabriel_producer_new_input(p.handle, &buf) })
+	err := call(func() C.uriel_status_t { return C.uriel_producer_new_input(p.handle, &buf) })
 	if err != nil {
 		return nil, err
 	}
@@ -86,8 +86,8 @@ func (p *Producer) Publish(flow string, n int) (uint64, error) {
 	cFlow := C.CString(flow)
 	defer C.free(unsafe.Pointer(cFlow))
 	var seq C.uint64_t
-	err := call(func() C.gabriel_status_t {
-		return C.gabriel_producer_publish_input(p.handle, C.size_t(n), cFlow, &seq)
+	err := call(func() C.uriel_status_t {
+		return C.uriel_producer_publish_input(p.handle, C.size_t(n), cFlow, &seq)
 	})
 	return uint64(seq), err
 }
@@ -113,7 +113,7 @@ func (p *Producer) Close() error {
 	if err := p.check(); err != nil {
 		return err
 	}
-	err := call(func() C.gabriel_status_t { return C.gabriel_producer_destroy(p.handle) })
+	err := call(func() C.uriel_status_t { return C.uriel_producer_destroy(p.handle) })
 	p.handle = nil
 	p.thread.release()
 	return err

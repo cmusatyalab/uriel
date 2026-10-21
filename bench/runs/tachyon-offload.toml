@@ -1,9 +1,9 @@
 # On a Tachyon: a camera at 30 fps publishes decoded 720p frames to YOLO on the device, which
 # passes frames with objects to a detector on an edge server, over the network. YOLO is the QNN
 # inference server as an external engine, on the fast cores; the detector runs on the edge server,
-# which runs gabriel-server. Start them before the run:
+# which runs uriel-server. Start them before the run:
 #
-#   edge:   gabriel-server --identity-dir identity --engine detector
+#   edge:   uriel-server --identity-dir identity --engine detector
 #   device: taskset -c 4-7 qnn-sample-app --model <yolo.so> --backend libQnnHtp.so \
 #               --gabriel_engine yolo
 #

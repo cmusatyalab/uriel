@@ -1,13 +1,13 @@
 //! iceoryx2 service naming scheme. Local peers find each other by name alone:
-//! a producer named `driver` publishes on `gabriel/producer/driver/input` and
-//! signals `gabriel/producer/driver/ready`.
+//! a producer named `driver` publishes on `uriel/producer/driver/input` and
+//! signals `uriel/producer/driver/ready`.
 
 use iceoryx2::prelude::{NodeName, ServiceName};
 
 use crate::{Error, Result};
 
-/// Prefix shared by every Gabriel service.
-const ROOT: &str = "gabriel";
+/// Prefix shared by every Uriel service.
+const ROOT: &str = "uriel";
 /// Separator between the segments of a service name.
 const SEPARATOR: char = '/';
 /// Segment for producer services.
@@ -172,7 +172,7 @@ fn node(kind: &str, name: &str) -> Result<NodeName> {
         .map_err(|e| Error::InvalidArgument(format!("invalid node name {node_name:?}: {e}")))
 }
 
-/// The `<name>` of a node named `gabriel/<kind>/<name>`.
+/// The `<name>` of a node named `uriel/<kind>/<name>`.
 fn name_of_node<'a>(kind: &str, node: &'a str) -> Option<&'a str> {
     node.strip_prefix(ROOT)?
         .strip_prefix(SEPARATOR)?
@@ -180,7 +180,7 @@ fn name_of_node<'a>(kind: &str, node: &'a str) -> Option<&'a str> {
         .strip_prefix(SEPARATOR)
 }
 
-/// `gabriel/<kind>/<name>`, after checking `name`.
+/// `uriel/<kind>/<name>`, after checking `name`.
 fn prefix(kind: &str, name: &str) -> Result<String> {
     if name.is_empty() || name.contains(SEPARATOR) {
         return Err(Error::InvalidArgument(format!(
@@ -198,7 +198,7 @@ mod tests {
     fn producer_name() {
         assert_eq!(
             producer_input_service("cam0").unwrap().as_str(),
-            "gabriel/producer/cam0/input"
+            "uriel/producer/cam0/input"
         );
     }
 
@@ -206,7 +206,7 @@ mod tests {
     fn producer_ready_name() {
         assert_eq!(
             producer_ready_service("cam0").unwrap().as_str(),
-            "gabriel/producer/cam0/ready"
+            "uriel/producer/cam0/ready"
         );
     }
 
@@ -214,11 +214,11 @@ mod tests {
     fn producer_result_names() {
         assert_eq!(
             producer_result_service("cam0").unwrap().as_str(),
-            "gabriel/producer/cam0/result"
+            "uriel/producer/cam0/result"
         );
         assert_eq!(
             producer_result_ready_service("cam0").unwrap().as_str(),
-            "gabriel/producer/cam0/result-ready"
+            "uriel/producer/cam0/result-ready"
         );
     }
 
@@ -226,7 +226,7 @@ mod tests {
     fn engine_name() {
         assert_eq!(
             engine_service("yolo").unwrap().as_str(),
-            "gabriel/engine/yolo/input"
+            "uriel/engine/yolo/input"
         );
     }
 
@@ -234,7 +234,7 @@ mod tests {
     fn engine_events_name() {
         assert_eq!(
             engine_events_service("yolo").unwrap().as_str(),
-            "gabriel/engine/yolo/events"
+            "uriel/engine/yolo/events"
         );
     }
 
@@ -242,7 +242,7 @@ mod tests {
     fn engine_derived_name() {
         assert_eq!(
             engine_derived_service("yolo").unwrap().as_str(),
-            "gabriel/engine/yolo/derived"
+            "uriel/engine/yolo/derived"
         );
     }
 
@@ -250,7 +250,7 @@ mod tests {
     fn engine_outcome_name() {
         assert_eq!(
             engine_outcome_service("yolo").unwrap().as_str(),
-            "gabriel/engine/yolo/outcome"
+            "uriel/engine/yolo/outcome"
         );
     }
 
@@ -258,15 +258,15 @@ mod tests {
     fn engine_ready_names() {
         assert_eq!(
             engine_input_ready_service("yolo").unwrap().as_str(),
-            "gabriel/engine/yolo/input-ready"
+            "uriel/engine/yolo/input-ready"
         );
         assert_eq!(
             engine_outcome_ready_service("yolo").unwrap().as_str(),
-            "gabriel/engine/yolo/outcome-ready"
+            "uriel/engine/yolo/outcome-ready"
         );
         assert_eq!(
             engine_events_ready_service("yolo").unwrap().as_str(),
-            "gabriel/engine/yolo/events-ready"
+            "uriel/engine/yolo/events-ready"
         );
     }
 
@@ -274,7 +274,7 @@ mod tests {
     fn engine_node_name_names_its_engine() {
         let node = engine_node("yolo").unwrap();
 
-        assert_eq!(node.as_str(), "gabriel/engine/yolo");
+        assert_eq!(node.as_str(), "uriel/engine/yolo");
         assert_eq!(engine_of_node(node.as_str()), Some("yolo"));
         assert_eq!(engine_of_node(server_node("yolo").unwrap().as_str()), None);
         assert_eq!(engine_of_node("yolo"), None);
@@ -292,15 +292,15 @@ mod tests {
     fn server_names() {
         assert_eq!(
             server_control_service("edge").unwrap().as_str(),
-            "gabriel/server/edge/control"
+            "uriel/server/edge/control"
         );
         assert_eq!(
             server_input_service("edge").unwrap().as_str(),
-            "gabriel/server/edge/input"
+            "uriel/server/edge/input"
         );
         assert_eq!(
             server_input_ready_service("edge").unwrap().as_str(),
-            "gabriel/server/edge/input-ready"
+            "uriel/server/edge/input-ready"
         );
     }
 
@@ -308,13 +308,13 @@ mod tests {
     fn client_names() {
         assert_eq!(
             client_events_service("app").unwrap().as_str(),
-            "gabriel/client/app/events"
+            "uriel/client/app/events"
         );
         assert_eq!(
             client_events_ready_service("app").unwrap().as_str(),
-            "gabriel/client/app/events-ready"
+            "uriel/client/app/events-ready"
         );
-        assert_eq!(client_node("app").unwrap().as_str(), "gabriel/client/app");
+        assert_eq!(client_node("app").unwrap().as_str(), "uriel/client/app");
     }
 
     #[test]

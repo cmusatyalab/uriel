@@ -592,78 +592,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gabriel"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "cbindgen",
- "futures-util",
- "humantime-serde",
- "iceoryx2",
- "iceoryx2-bb-container",
- "metrics",
- "metrics-exporter-prometheus",
- "metrics-util",
- "petgraph",
- "postcard",
- "quinn",
- "rcgen",
- "rlimit",
- "rustix 1.1.5",
- "serde",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tokio-util",
- "toml 1.1.8+spec-1.1.0",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "gabriel-bench"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "csv",
- "gabriel",
- "humantime",
- "humantime-serde",
- "rand 0.10.3",
- "rand_distr",
- "serde",
- "toml 1.1.8+spec-1.1.0",
-]
-
-[[package]]
-name = "gabriel-h264"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "gabriel",
- "gstreamer",
- "gstreamer-app",
- "gstreamer-video",
- "protobuf",
- "protobuf-codegen",
- "signal-hook",
-]
-
-[[package]]
-name = "gabriel-server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "gabriel",
- "metrics",
- "signal-hook",
-]
-
-[[package]]
 name = "generator"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2732,6 +2660,78 @@ name = "untrusted"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
+
+[[package]]
+name = "uriel"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "cbindgen",
+ "futures-util",
+ "humantime-serde",
+ "iceoryx2",
+ "iceoryx2-bb-container",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "metrics-util",
+ "petgraph",
+ "postcard",
+ "quinn",
+ "rcgen",
+ "rlimit",
+ "rustix 1.1.5",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+ "toml 1.1.8+spec-1.1.0",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "uriel-bench"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "csv",
+ "humantime",
+ "humantime-serde",
+ "rand 0.10.3",
+ "rand_distr",
+ "serde",
+ "toml 1.1.8+spec-1.1.0",
+ "uriel",
+]
+
+[[package]]
+name = "uriel-h264"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "gstreamer",
+ "gstreamer-app",
+ "gstreamer-video",
+ "protobuf",
+ "protobuf-codegen",
+ "signal-hook",
+ "uriel",
+]
+
+[[package]]
+name = "uriel-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "metrics",
+ "signal-hook",
+ "uriel",
+]
 
 [[package]]
 name = "utf8parse"

@@ -5,8 +5,8 @@
 use std::{fs, path::Path, time::Duration};
 
 use anyhow::{Context, Result};
-use gabriel::{InputId, Timestamp, subscription::Event};
 use serde::Serialize;
+use uriel::{InputId, Timestamp, subscription::Event};
 
 /// An input a producer published.
 #[derive(Debug, Serialize)]
@@ -99,7 +99,7 @@ impl EventRow {
             },
             Event::Published(event) => {
                 let kind = event.kind();
-                let names_input = kind != gabriel::EventKind::Disconnected;
+                let names_input = kind != uriel::EventKind::Disconnected;
                 Self {
                     kind: format!("{kind:?}"),
                     producer: producer.to_owned(),
@@ -107,9 +107,9 @@ impl EventRow {
                     seq: names_input.then(|| event.id().seq()),
                     flow: event.flow().to_owned(),
                     engine: event.engine().to_owned(),
-                    outcome: (kind == gabriel::EventKind::Result)
+                    outcome: (kind == uriel::EventKind::Result)
                         .then(|| format!("{:?}", event.outcome())),
-                    result_len: (kind == gabriel::EventKind::Result).then(|| event.result().len()),
+                    result_len: (kind == uriel::EventKind::Result).then(|| event.result().len()),
                     offered_ns: event.offered_at().map(|at| at.as_nanos()),
                     at_ns: Some(event.at().as_nanos()),
                     received_ns: event.received_at().map(|at| at.as_nanos()),

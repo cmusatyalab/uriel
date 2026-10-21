@@ -1,4 +1,4 @@
-//! Runs a Gabriel flow with synthetic engines, and records when each input reached each stage.
+//! Runs a Uriel flow with synthetic engines, and records when each input reached each stage.
 //!
 //! A run is described by a TOML file (see `runs/`): the flow, how fast each producer publishes,
 //! and how long each engine works on an input. The run writes, into its output directory:
@@ -7,7 +7,7 @@
 //! them into staleness, drops, and throughput.
 //!
 //! ```text
-//! cargo run --release -p gabriel-bench -- bench/runs/chain.toml
+//! cargo run --release -p uriel-bench -- bench/runs/chain.toml
 //! ```
 //!
 //! A run with a `[network]` section emulates the link to the remote server on loopback, so it must
@@ -38,14 +38,14 @@ use crate::{
 const RESULTS_DIR: &str = "bench-results";
 
 #[derive(Debug, Parser)]
-#[command(about = "Runs a Gabriel flow with synthetic or external engines and records its events")]
+#[command(about = "Runs a Uriel flow with synthetic or external engines and records its events")]
 struct Args {
     /// The run's TOML file.
     run: PathBuf,
     /// Where to write the results. Defaults to `bench-results/<name>-<unix time>`.
     #[arg(long)]
     out: Option<PathBuf>,
-    /// Which of Gabriel's log messages to print, in the syntax of RUST_LOG, e.g. "info".
+    /// Which of Uriel's log messages to print, in the syntax of RUST_LOG, e.g. "info".
     #[arg(long)]
     log: Option<String>,
 }
@@ -65,7 +65,7 @@ struct Meta {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    gabriel::logging::init(args.log.as_deref())?;
+    uriel::logging::init(args.log.as_deref())?;
     let (spec, text) = RunSpec::read(&args.run)?;
     if let Some(network) = &spec.network {
         network::emulate(network).context("failed to emulate the network")?;

@@ -7,7 +7,7 @@ import time
 import numpy as np
 import pytest
 
-import gabriel
+import uriel
 
 MAX_INPUT_SIZE = 64
 MAX_OUTPUT_SIZE = 64
@@ -52,11 +52,11 @@ class Fixture:
     def __init__(self) -> None:
         self.producer_name, self.engine_name = unique("camera"), unique("detector")
         server_name = unique("server")
-        self.server = gabriel.Server(server_name)
-        self.engine = gabriel.Engine(self.engine_name, max_output_size=MAX_OUTPUT_SIZE)
+        self.server = uriel.Server(server_name)
+        self.engine = uriel.Engine(self.engine_name, max_output_size=MAX_OUTPUT_SIZE)
         self.server.add_engine(self.engine_name)
-        self.client = gabriel.Client(unique("client"), server_name)
-        self.producer = gabriel.Producer(
+        self.client = uriel.Client(unique("client"), server_name)
+        self.producer = uriel.Producer(
             self.producer_name, input_type=INPUT_TYPE, max_input_size=MAX_INPUT_SIZE
         )
         self.client.add_producer(self.producer_name)
@@ -77,7 +77,7 @@ def fixture():
 
 
 def test_input_reaches_engine_and_result_reaches_app(fixture):
-    with gabriel.Subscription.producer(fixture.producer_name) as events:
+    with uriel.Subscription.producer(fixture.producer_name) as events:
         fixture.add_flow()
 
         seq = fixture.producer.send(FLOW, b"frame")
@@ -90,11 +90,11 @@ def test_input_reaches_engine_and_result_reaches_app(fixture):
         fixture.engine.forward(result=b"cat")
 
         deadline = time.monotonic() + WAIT
-        while (event := events.next(deadline - time.monotonic())).kind != gabriel.EventKind.RESULT:
+        while (event := events.next(deadline - time.monotonic())).kind != uriel.EventKind.RESULT:
             pass
         assert event.engine == fixture.engine_name
         assert event.id.seq == seq
-        assert event.outcome == gabriel.Outcome.FORWARD
+        assert event.outcome == uriel.Outcome.FORWARD
         assert event.result == b"cat"
         assert 0 < event.at_ns <= time.monotonic_ns()
 
@@ -133,12 +133,12 @@ def test_input_cannot_be_read_after_its_outcome(fixture):
 
 
 def test_error_says_what_failed(fixture):
-    with pytest.raises(gabriel.InvalidArgumentError, match="invalid argument: "):
+    with pytest.raises(uriel.InvalidArgumentError, match="invalid argument: "):
         fixture.client.add_flow(FLOW, "[[edges]")
 
 
 def test_oversized_input_is_refused(fixture):
-    with pytest.raises(gabriel.SizeExceededError):
+    with pytest.raises(uriel.SizeExceededError):
         fixture.producer.send(FLOW, bytes(MAX_INPUT_SIZE + 1))
 
 
@@ -164,20 +164,20 @@ def test_engine_on_a_thread_of_its_own_gets_inputs():
     ready, results = threading.Event(), []
 
     def serve():
-        with gabriel.Engine(engine_name, max_output_size=MAX_OUTPUT_SIZE) as engine:
+        with uriel.Engine(engine_name, max_output_size=MAX_OUTPUT_SIZE) as engine:
             ready.set()
             input = engine.next(WAIT)
             results.append(bytes(input.data))
             engine.drop()
 
     thread = threading.Thread(target=serve)
-    with gabriel.Server(server_name) as server:
+    with uriel.Server(server_name) as server:
         thread.start()
         assert ready.wait(WAIT)
         server.add_engine(engine_name)
         with (
-            gabriel.Producer(producer_name, max_input_size=MAX_INPUT_SIZE) as producer,
-            gabriel.Client(unique("client"), server_name) as client,
+            uriel.Producer(producer_name, max_input_size=MAX_INPUT_SIZE) as producer,
+            uriel.Client(unique("client"), server_name) as client,
         ):
             client.add_producer(producer_name)
             client.add_flow(FLOW, chain(producer_name, engine_name))
@@ -193,62 +193,62 @@ def test_engine_used_from_another_thread_fails(fixture):
     thread.start()
     thread.join()
 
-    assert isinstance(errors[0], gabriel.WrongThreadError)
+    assert isinstance(errors[0], uriel.WrongThreadError)
 
 
 def _raised(function) -> Exception | None:
     try:
         function()
-    except gabriel.GabrielError as e:
+    except uriel.UrielError as e:
         return e
     return None
 
 
 def test_closed_handle_fails():
-    producer = gabriel.Producer(unique("camera"), max_input_size=MAX_INPUT_SIZE)
+    producer = uriel.Producer(unique("camera"), max_input_size=MAX_INPUT_SIZE)
     producer.close()
     producer.close()
 
-    with pytest.raises(gabriel.ClosedError):
+    with pytest.raises(uriel.ClosedError):
         producer.loan()
 
 
 def test_remote_server_gives_its_port_and_certificate():
-    with gabriel.Server(unique("server"), bind_addr="127.0.0.1:0") as server:
+    with uriel.Server(unique("server"), bind_addr="127.0.0.1:0") as server:
         assert server.remote_port > 0
         assert len(server.certificate) > 0
 
 
 def test_client_takes_a_remote_server_and_a_crossing_capacity():
-    with gabriel.Server(unique("server"), bind_addr="127.0.0.1:0") as server:
-        remote = gabriel.RemoteServer(
+    with uriel.Server(unique("server"), bind_addr="127.0.0.1:0") as server:
+        remote = uriel.RemoteServer(
             f"127.0.0.1:{server.remote_port}", server.certificate, crossing_capacity=4
         )
-        with gabriel.Client(unique("client"), unique("local"), remote=remote):
+        with uriel.Client(unique("client"), unique("local"), remote=remote):
             pass
 
 
 def test_negative_crossing_capacity_is_invalid():
-    remote = gabriel.RemoteServer("127.0.0.1:4433", b"", crossing_capacity=-1)
-    with pytest.raises(gabriel.InvalidArgumentError):
-        gabriel.Client(unique("client"), unique("local"), remote=remote)
+    remote = uriel.RemoteServer("127.0.0.1:4433", b"", crossing_capacity=-1)
+    with pytest.raises(uriel.InvalidArgumentError):
+        uriel.Client(unique("client"), unique("local"), remote=remote)
 
 
 def test_identity_dir_without_bind_addr_is_invalid(tmp_path):
-    with pytest.raises(gabriel.InvalidArgumentError):
-        gabriel.Server(unique("server"), identity_dir=tmp_path)
+    with pytest.raises(uriel.InvalidArgumentError):
+        uriel.Server(unique("server"), identity_dir=tmp_path)
 
 
 def test_an_event_kind_from_a_newer_abi_stays_an_int():
-    from gabriel.types import _known
+    from uriel.types import _known
 
-    assert _known(gabriel.EventKind, gabriel.EventKind.RESULT) is gabriel.EventKind.RESULT
-    assert _known(gabriel.EventKind, 1000) == 1000
+    assert _known(uriel.EventKind, uriel.EventKind.RESULT) is uriel.EventKind.RESULT
+    assert _known(uriel.EventKind, 1000) == 1000
 
 
 def test_replacement_reaches_the_next_engine(fixture):
     tracker_name = unique("tracker")
-    with gabriel.Engine(tracker_name, max_output_size=MAX_OUTPUT_SIZE) as tracker:
+    with uriel.Engine(tracker_name, max_output_size=MAX_OUTPUT_SIZE) as tracker:
         fixture.server.add_engine(tracker_name)
         fixture.client.add_flow(
             FLOW,
@@ -278,7 +278,7 @@ timeout = "5s"
 
 
 def test_engine_subscriber_sees_the_engines_result(fixture):
-    with gabriel.Subscription.engine(fixture.engine_name) as events:
+    with uriel.Subscription.engine(fixture.engine_name) as events:
         fixture.add_flow()
 
         seq = fixture.producer.send(FLOW, b"frame")
@@ -286,14 +286,14 @@ def test_engine_subscriber_sees_the_engines_result(fixture):
         fixture.engine.forward(result=b"cat")
 
         deadline = time.monotonic() + WAIT
-        while (event := events.next(deadline - time.monotonic())).kind != gabriel.EventKind.RESULT:
+        while (event := events.next(deadline - time.monotonic())).kind != uriel.EventKind.RESULT:
             assert event.engine == fixture.engine_name
         assert event.id.seq == seq
         assert event.result == b"cat"
 
 
 def test_engine_waits_for_an_event_of_an_engine_it_subscribes_to(fixture):
-    with gabriel.Engine(unique("fusion"), max_output_size=MAX_OUTPUT_SIZE) as fusion:
+    with uriel.Engine(unique("fusion"), max_output_size=MAX_OUTPUT_SIZE) as fusion:
         fusion.subscribe(fixture.engine_name)
         fixture.add_flow()
 
@@ -305,7 +305,7 @@ def test_engine_waits_for_an_event_of_an_engine_it_subscribes_to(fixture):
         while True:
             assert fusion.wait(deadline - time.monotonic())
             event = fusion.poll_event()
-            if event is not None and event.kind == gabriel.EventKind.RESULT:
+            if event is not None and event.kind == uriel.EventKind.RESULT:
                 break
         assert event.engine == fixture.engine_name
         assert event.id.seq == seq
@@ -316,8 +316,8 @@ def test_engine_waits_for_an_event_of_an_engine_it_subscribes_to(fixture):
 def test_fusion_publishes_a_derived_result_its_subscribers_get(fixture):
     fusion_name = unique("fusion")
     with (
-        gabriel.Engine(fusion_name, max_output_size=MAX_OUTPUT_SIZE) as fusion,
-        gabriel.Subscription.engine(fusion_name) as decisions,
+        uriel.Engine(fusion_name, max_output_size=MAX_OUTPUT_SIZE) as fusion,
+        uriel.Subscription.engine(fusion_name) as decisions,
     ):
         fixture.server.add_engine(fusion_name)
         fusion.subscribe(fixture.engine_name)
@@ -326,13 +326,13 @@ def test_fusion_publishes_a_derived_result_its_subscribers_get(fixture):
         assert fixture.engine.next(WAIT) is not None
         fixture.engine.forward(result=b"cat")
         deadline = time.monotonic() + WAIT
-        while (event := fusion.poll_event()) is None or event.kind != gabriel.EventKind.RESULT:
+        while (event := fusion.poll_event()) is None or event.kind != uriel.EventKind.RESULT:
             fusion.wait(deadline - time.monotonic())
 
         fusion.publish_derived(event.id, event.flow, b"person", result_type="example.Decision")
 
         decision = decisions.next(WAIT)
-        assert decision.kind == gabriel.EventKind.DERIVED
+        assert decision.kind == uriel.EventKind.DERIVED
         assert decision.engine == fusion_name
         assert decision.id == event.id
         assert decision.result == b"person"
@@ -340,13 +340,13 @@ def test_fusion_publishes_a_derived_result_its_subscribers_get(fixture):
 
 
 def test_reader_and_engine_both_get_the_input(fixture):
-    with gabriel.Reader(fixture.producer_name) as reader:
+    with uriel.Reader(fixture.producer_name) as reader:
         fixture.add_flow()
 
         seq = fixture.producer.send(FLOW, b"frame")
         input = reader.next(WAIT)
 
-        assert input.id == gabriel.InputId(fixture.producer_name, fixture.producer.session, seq)
+        assert input.id == uriel.InputId(fixture.producer_name, fixture.producer.session, seq)
         assert (bytes(input.data), input.flow, input.payload_type) == (b"frame", FLOW, INPUT_TYPE)
         assert input.lost == 0
         assert fixture.engine.next(WAIT) is not None
@@ -355,8 +355,8 @@ def test_reader_and_engine_both_get_the_input(fixture):
 def test_reader_reads_inputs_in_order():
     name = unique("camera")
     with (
-        gabriel.Reader(name) as reader,
-        gabriel.Producer(name, max_input_size=MAX_INPUT_SIZE) as producer,
+        uriel.Reader(name) as reader,
+        uriel.Producer(name, max_input_size=MAX_INPUT_SIZE) as producer,
     ):
         producer.send(FLOW, b"one")
         producer.send(FLOW, b"two")
@@ -369,8 +369,8 @@ def test_reader_reads_inputs_in_order():
 def test_read_input_cannot_be_read_after_the_next_poll():
     name = unique("camera")
     with (
-        gabriel.Reader(name) as reader,
-        gabriel.Producer(name, max_input_size=MAX_INPUT_SIZE) as producer,
+        uriel.Reader(name) as reader,
+        uriel.Producer(name, max_input_size=MAX_INPUT_SIZE) as producer,
     ):
         producer.send(FLOW, b"frame")
         input = reader.next(WAIT)
@@ -382,5 +382,5 @@ def test_read_input_cannot_be_read_after_the_next_poll():
 
 
 def test_reader_without_input_times_out():
-    with gabriel.Reader(unique("camera")) as reader:
+    with uriel.Reader(unique("camera")) as reader:
         assert reader.next(0.01) is None

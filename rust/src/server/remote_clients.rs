@@ -100,7 +100,7 @@ impl RemoteClients {
         let config = identity.server_config()?;
         let (updates_tx, updates_rx) = mpsc::channel();
         let (endpoint, thread) = net::spawn(
-            format!("gabriel-server-{name}-network"),
+            format!("uriel-server-{name}-network"),
             ready_service,
             move |waker| {
                 let endpoint = Endpoint::server(config, addr)

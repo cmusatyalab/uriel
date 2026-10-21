@@ -1,10 +1,10 @@
 //! C ABI. Every function returns a [`Status`]; handles are opaque pointers
 //! created by `*_create` and freed by `*_destroy`, and a function that acts on a handle takes it
-//! first. After a failure, [`gabriel_last_error`] says what went wrong.
+//! first. After a failure, [`uriel_last_error`] says what went wrong.
 //!
 //! The ABI has a version, [`ABI_VERSION`], which changes whenever a call or a struct changes in a
 //! way that breaks code built against the previous version. A binding that loads the library at
-//! run time compares the header's version with [`gabriel_abi_version`]. Enums are 32 bits wide,
+//! run time compares the header's version with [`uriel_abi_version`]. Enums are 32 bits wide,
 //! and new variants may be added at the end, so code should handle values it does not know.
 //!
 //! A producer, an engine, a subscription and a reader must stay on the thread that created them:
@@ -30,9 +30,9 @@ use crate::{
 pub const ABI_VERSION: u32 = 2;
 
 /// The version of the ABI that the library implements. A caller built with a header of another
-/// version (`GABRIEL_ABI_VERSION`) must not use the library.
+/// version (`URIEL_ABI_VERSION`) must not use the library.
 #[unsafe(no_mangle)]
-pub extern "C" fn gabriel_abi_version() -> u32 {
+pub extern "C" fn uriel_abi_version() -> u32 {
     ABI_VERSION
 }
 
@@ -52,7 +52,7 @@ thread_local! {
     static LAST_ERROR: RefCell<CString> = RefCell::default();
 }
 
-/// Records `err` as this thread's last error, for [`gabriel_last_error`].
+/// Records `err` as this thread's last error, for [`uriel_last_error`].
 fn set_last_error(err: &Error) {
     // A message with a NUL in it is cut there, rather than lost.
     let message = err.to_string();
@@ -68,7 +68,7 @@ fn set_last_error(err: &Error) {
 /// Says what went wrong in the last call on this thread that failed. The string stays valid until
 /// the next call on this thread that fails. It is "" if no call has failed yet.
 #[unsafe(no_mangle)]
-pub extern "C" fn gabriel_last_error() -> *const c_char {
+pub extern "C" fn uriel_last_error() -> *const c_char {
     LAST_ERROR.with(|last| last.borrow().as_ptr())
 }
 
@@ -162,21 +162,21 @@ unsafe fn destroy_handle<T>(ptr: *mut T) -> Status {
 
 // --- Logging ---
 
-/// Prints Gabriel's log to standard error. `filter` picks what is printed, in the syntax of
-/// `RUST_LOG`, e.g. "info" or "gabriel=debug". If it is NULL, `RUST_LOG` picks, or warnings and
+/// Prints Uriel's log to standard error. `filter` picks what is printed, in the syntax of
+/// `RUST_LOG`, e.g. "info" or "uriel=debug". If it is NULL, `RUST_LOG` picks, or warnings and
 /// errors are printed if that is unset. Call it once, before anything else; without it, nothing is
 /// logged. Fails with `ERR_INVALID` for a malformed filter, or when called a second time.
 ///
 /// # Safety
 /// `filter` must be NUL-terminated or null.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_log_init(filter: *const c_char) -> Status {
+pub unsafe extern "C" fn uriel_log_init(filter: *const c_char) -> Status {
     Status::from(unsafe { opt_str_arg(filter) }.and_then(logging::init))
 }
 
 // --- Metrics ---
 
-/// Serves the metrics of Gabriel's clients and servers in this process to Prometheus, at
+/// Serves the metrics of Uriel's clients and servers in this process to Prometheus, at
 /// `http://<addr>/metrics`, e.g. "0.0.0.0:9464". Call it once, before creating clients and servers.
 /// Fails with `ERR_INVALID` for a malformed address. Also fails if the address is taken, or when
 /// called a second time.
@@ -184,7 +184,7 @@ pub unsafe extern "C" fn gabriel_log_init(filter: *const c_char) -> Status {
 /// # Safety
 /// `addr` must be NUL-terminated.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_metrics_serve(addr: *const c_char) -> Status {
+pub unsafe extern "C" fn uriel_metrics_serve(addr: *const c_char) -> Status {
     let result = unsafe { str_arg(addr) }.and_then(|addr| {
         let addr = addr.parse().map_err(|e| {
             Error::InvalidArgument(format!("invalid metrics address {addr:?}: {e}"))
@@ -203,7 +203,7 @@ pub unsafe extern "C" fn gabriel_metrics_serve(addr: *const c_char) -> Status {
 /// String arguments must be NUL-terminated (`input_type` may be null); `producer` must be valid
 /// for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_producer_create(
+pub unsafe extern "C" fn uriel_producer_create(
     name: *const c_char,
     input_type: *const c_char,
     max_input_size: usize,
@@ -219,14 +219,14 @@ pub unsafe extern "C" fn gabriel_producer_create(
 /// # Safety
 /// `producer` must be null or a live handle that is not used afterwards.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_producer_destroy(producer: *mut Producer) -> Status {
+pub unsafe extern "C" fn uriel_producer_destroy(producer: *mut Producer) -> Status {
     unsafe { destroy_handle(producer) }
 }
 
 /// # Safety
 /// `producer` must be a live handle; `buf` must be valid for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_producer_new_input(
+pub unsafe extern "C" fn uriel_producer_new_input(
     producer: *mut Producer,
     buf: *mut *mut u8,
 ) -> Status {
@@ -246,7 +246,7 @@ pub unsafe extern "C" fn gabriel_producer_new_input(
 /// `producer` must be a live handle; `flow` must be NUL-terminated; `seq` must be null or valid
 /// for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_producer_publish_input(
+pub unsafe extern "C" fn uriel_producer_publish_input(
     producer: *mut Producer,
     len: usize,
     flow: *const c_char,
@@ -266,7 +266,7 @@ pub unsafe extern "C" fn gabriel_producer_publish_input(
 /// # Safety
 /// `producer` must be a live handle; `session` must be valid for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_producer_session(
+pub unsafe extern "C" fn uriel_producer_session(
     producer: *mut Producer,
     session: *mut u64,
 ) -> Status {
@@ -280,7 +280,7 @@ pub unsafe extern "C" fn gabriel_producer_session(
 // --- Client ---
 
 /// How to create a client, beyond its name and local server. New options are added as new
-/// setters, so `gabriel_client_create` keeps its signature.
+/// setters, so `uriel_client_create` keeps its signature.
 #[derive(Debug, Default)]
 pub struct ClientOptions {
     remote: Option<RemoteServerConfig>,
@@ -292,26 +292,26 @@ pub struct ClientOptions {
 /// # Safety
 /// `options` must be valid for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_client_options_create(options: *mut *mut ClientOptions) -> Status {
+pub unsafe extern "C" fn uriel_client_options_create(options: *mut *mut ClientOptions) -> Status {
     unsafe { create_handle(options, || Ok(ClientOptions::default())) }
 }
 
 /// # Safety
 /// `options` must be null or a live handle that is not used afterwards.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_client_options_destroy(options: *mut ClientOptions) -> Status {
+pub unsafe extern "C" fn uriel_client_options_destroy(options: *mut ClientOptions) -> Status {
     unsafe { destroy_handle(options) }
 }
 
 /// Connects the client to the remote server at `addr`, e.g. "192.0.2.1:4433". The client trusts
 /// only the certificate of `certificate_len` bytes at `certificate`, in DER, as
-/// `gabriel_server_certificate` gives it.
+/// `uriel_server_certificate` gives it.
 ///
 /// # Safety
 /// `options` must be a live handle; `addr` must be NUL-terminated; `certificate` must point to
 /// `certificate_len` readable bytes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_client_options_set_remote_server(
+pub unsafe extern "C" fn uriel_client_options_set_remote_server(
     options: *mut ClientOptions,
     addr: *const c_char,
     certificate: *const u8,
@@ -339,7 +339,7 @@ pub unsafe extern "C" fn gabriel_client_options_set_remote_server(
 /// # Safety
 /// `options` must be a live handle.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_client_options_set_remote_crossing_capacity(
+pub unsafe extern "C" fn uriel_client_options_set_remote_crossing_capacity(
     options: *mut ClientOptions,
     capacity: usize,
 ) -> Status {
@@ -356,7 +356,7 @@ pub unsafe extern "C" fn gabriel_client_options_set_remote_crossing_capacity(
 /// String arguments must be NUL-terminated; `options` must be null or a live handle; `client`
 /// must be valid for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_client_create(
+pub unsafe extern "C" fn uriel_client_create(
     name: *const c_char,
     local_server: *const c_char,
     options: *const ClientOptions,
@@ -382,14 +382,14 @@ pub unsafe extern "C" fn gabriel_client_create(
 /// # Safety
 /// `client` must be null or a live handle that is not used afterwards.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_client_destroy(client: *mut Client) -> Status {
+pub unsafe extern "C" fn uriel_client_destroy(client: *mut Client) -> Status {
     unsafe { destroy_handle(client) }
 }
 
 /// # Safety
 /// `client` must be a live handle; `name` must be NUL-terminated.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_client_add_producer(
+pub unsafe extern "C" fn uriel_client_add_producer(
     client: *mut Client,
     name: *const c_char,
 ) -> Status {
@@ -399,7 +399,7 @@ pub unsafe extern "C" fn gabriel_client_add_producer(
 /// # Safety
 /// `client` must be a live handle; `name` must be NUL-terminated.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_client_remove_producer(
+pub unsafe extern "C" fn uriel_client_remove_producer(
     client: *mut Client,
     name: *const c_char,
 ) -> Status {
@@ -412,7 +412,7 @@ pub unsafe extern "C" fn gabriel_client_remove_producer(
 /// # Safety
 /// `client` must be a live handle; string arguments must be NUL-terminated.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_client_add_flow(
+pub unsafe extern "C" fn uriel_client_add_flow(
     client: *mut Client,
     name: *const c_char,
     spec: *const c_char,
@@ -428,7 +428,7 @@ pub unsafe extern "C" fn gabriel_client_add_flow(
 /// # Safety
 /// `client` must be a live handle; `name` must be NUL-terminated.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_client_remove_flow(
+pub unsafe extern "C" fn uriel_client_remove_flow(
     client: *mut Client,
     name: *const c_char,
 ) -> Status {
@@ -438,7 +438,7 @@ pub unsafe extern "C" fn gabriel_client_remove_flow(
 // --- Server ---
 
 /// How to create a server, beyond its name. New options are added as new setters, so
-/// `gabriel_server_create` keeps its signature.
+/// `uriel_server_create` keeps its signature.
 #[derive(Debug, Default)]
 pub struct ServerOptions {
     bind_addr: Option<String>,
@@ -450,14 +450,14 @@ pub struct ServerOptions {
 /// # Safety
 /// `options` must be valid for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_server_options_create(options: *mut *mut ServerOptions) -> Status {
+pub unsafe extern "C" fn uriel_server_options_create(options: *mut *mut ServerOptions) -> Status {
     unsafe { create_handle(options, || Ok(ServerOptions::default())) }
 }
 
 /// # Safety
 /// `options` must be null or a live handle that is not used afterwards.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_server_options_destroy(options: *mut ServerOptions) -> Status {
+pub unsafe extern "C" fn uriel_server_options_destroy(options: *mut ServerOptions) -> Status {
     unsafe { destroy_handle(options) }
 }
 
@@ -466,7 +466,7 @@ pub unsafe extern "C" fn gabriel_server_options_destroy(options: *mut ServerOpti
 /// # Safety
 /// `options` must be a live handle; `addr` must be NUL-terminated.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_server_options_set_bind_addr(
+pub unsafe extern "C" fn uriel_server_options_set_bind_addr(
     options: *mut ServerOptions,
     addr: *const c_char,
 ) -> Status {
@@ -487,7 +487,7 @@ pub unsafe extern "C" fn gabriel_server_options_set_bind_addr(
 /// # Safety
 /// `options` must be a live handle; `dir` must be NUL-terminated.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_server_options_set_identity_dir(
+pub unsafe extern "C" fn uriel_server_options_set_identity_dir(
     options: *mut ServerOptions,
     dir: *const c_char,
 ) -> Status {
@@ -507,7 +507,7 @@ pub unsafe extern "C" fn gabriel_server_options_set_identity_dir(
 /// `name` must be NUL-terminated; `options` must be null or a live handle; `server` must be valid
 /// for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_server_create(
+pub unsafe extern "C" fn uriel_server_create(
     name: *const c_char,
     options: *const ServerOptions,
     server: *mut *mut Server,
@@ -527,7 +527,7 @@ pub unsafe extern "C" fn gabriel_server_create(
 /// # Safety
 /// `server` must be null or a live handle that is not used afterwards.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_server_destroy(server: *mut Server) -> Status {
+pub unsafe extern "C" fn uriel_server_destroy(server: *mut Server) -> Status {
     unsafe { destroy_handle(server) }
 }
 
@@ -537,7 +537,7 @@ pub unsafe extern "C" fn gabriel_server_destroy(server: *mut Server) -> Status {
 /// # Safety
 /// `server` must be a live handle; `port` must be valid for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_server_remote_port(server: *mut Server, port: *mut u16) -> Status {
+pub unsafe extern "C" fn uriel_server_remote_port(server: *mut Server, port: *mut u16) -> Status {
     let result = unsafe {
         (|| {
             let addr = handle_arg(server)?.remote_addr().ok_or_else(not_remote)?;
@@ -558,7 +558,7 @@ pub unsafe extern "C" fn gabriel_server_remote_port(server: *mut Server, port: *
 /// # Safety
 /// `server` must be a live handle; `certificate` and `len` must be valid for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_server_certificate(
+pub unsafe extern "C" fn uriel_server_certificate(
     server: *mut Server,
     certificate: *mut *const u8,
     len: *mut usize,
@@ -584,7 +584,7 @@ fn not_remote() -> Error {
 /// # Safety
 /// `server` must be a live handle; `name` must be NUL-terminated.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_server_add_engine(
+pub unsafe extern "C" fn uriel_server_add_engine(
     server: *mut Server,
     name: *const c_char,
 ) -> Status {
@@ -594,7 +594,7 @@ pub unsafe extern "C" fn gabriel_server_add_engine(
 /// # Safety
 /// `server` must be a live handle; `name` must be NUL-terminated.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_server_remove_engine(
+pub unsafe extern "C" fn uriel_server_remove_engine(
     server: *mut Server,
     name: *const c_char,
 ) -> Status {
@@ -644,7 +644,7 @@ unsafe fn bytes_arg<'a>(ptr: *const u8, len: usize) -> Result<&'a [u8]> {
 /// String arguments must be NUL-terminated (`result_type` may be null); `engine` must be valid
 /// for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_engine_create(
+pub unsafe extern "C" fn uriel_engine_create(
     name: *const c_char,
     result_type: *const c_char,
     max_output_size: usize,
@@ -660,18 +660,18 @@ pub unsafe extern "C" fn gabriel_engine_create(
 /// # Safety
 /// `engine` must be null or a live handle that is not used afterwards.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_engine_destroy(engine: *mut Engine) -> Status {
+pub unsafe extern "C" fn uriel_engine_destroy(engine: *mut Engine) -> Status {
     unsafe { destroy_handle(engine) }
 }
 
 /// Waits until an input or an event of a subscription is ready, or `timeout_ms` passes, and
-/// returns `ERR_AGAIN` then. Fetch the input with `gabriel_engine_poll_input`, and the event with
-/// `gabriel_engine_poll_event`; either may still return `ERR_AGAIN`.
+/// returns `ERR_AGAIN` then. Fetch the input with `uriel_engine_poll_input`, and the event with
+/// `uriel_engine_poll_event`; either may still return `ERR_AGAIN`.
 ///
 /// # Safety
 /// `engine` must be a live handle.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_engine_wait(engine: *mut Engine, timeout_ms: u32) -> Status {
+pub unsafe extern "C" fn uriel_engine_wait(engine: *mut Engine, timeout_ms: u32) -> Status {
     let timeout = Duration::from_millis(u64::from(timeout_ms));
     Status::from(unsafe { handle_arg(engine) }.and_then(|engine| engine.wait(timeout)))
 }
@@ -682,7 +682,7 @@ pub unsafe extern "C" fn gabriel_engine_wait(engine: *mut Engine, timeout_ms: u3
 /// # Safety
 /// `engine` must be a live handle; `input` must be valid for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_engine_poll_input(
+pub unsafe extern "C" fn uriel_engine_poll_input(
     engine: *mut Engine,
     input: *mut InputView,
 ) -> Status {
@@ -709,12 +709,12 @@ pub unsafe extern "C" fn gabriel_engine_poll_input(
 }
 
 /// Subscribes the engine to the events of the engine `name`, e.g. a detector whose results it
-/// fuses. Only events published from now on are read. `gabriel_engine_wait` ends for them too.
+/// fuses. Only events published from now on are read. `uriel_engine_wait` ends for them too.
 ///
 /// # Safety
 /// `engine` must be a live handle; `name` must be NUL-terminated.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_engine_subscribe(
+pub unsafe extern "C" fn uriel_engine_subscribe(
     engine: *mut Engine,
     name: *const c_char,
 ) -> Status {
@@ -729,7 +729,7 @@ pub unsafe extern "C" fn gabriel_engine_subscribe(
 /// # Safety
 /// `engine` must be a live handle; `event` must be valid for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_engine_poll_event(
+pub unsafe extern "C" fn uriel_engine_poll_event(
     engine: *mut Engine,
     event: *mut EventView,
 ) -> Status {
@@ -754,7 +754,7 @@ pub unsafe extern "C" fn gabriel_engine_poll_event(
 /// NUL-terminated; `result_type` must be null or NUL-terminated; `result` must point to
 /// `result_len` readable bytes, or be null when `result_len` is 0.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_engine_publish_derived(
+pub unsafe extern "C" fn uriel_engine_publish_derived(
     engine: *mut Engine,
     id: *const InputIdView,
     flow: *const c_char,
@@ -792,7 +792,7 @@ pub unsafe extern "C" fn gabriel_engine_publish_derived(
 /// `engine` must be a live handle; `result` must point to `result_len` readable bytes, or be
 /// null when `result_len` is 0.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_engine_drop(
+pub unsafe extern "C" fn uriel_engine_drop(
     engine: *mut Engine,
     result: *const u8,
     result_len: usize,
@@ -803,9 +803,9 @@ pub unsafe extern "C" fn gabriel_engine_drop(
 /// Forward: forward the input unchanged along every outgoing input edge.
 ///
 /// # Safety
-/// As for [`gabriel_engine_drop`].
+/// As for [`uriel_engine_drop`].
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_engine_forward(
+pub unsafe extern "C" fn uriel_engine_forward(
     engine: *mut Engine,
     result: *const u8,
     result_len: usize,
@@ -813,15 +813,12 @@ pub unsafe extern "C" fn gabriel_engine_forward(
     Status::from(unsafe { (|| handle_arg(engine)?.forward(bytes_arg(result, result_len)?))() })
 }
 
-/// Loans a buffer for a new input. Fill it, then call `gabriel_engine_replace`.
+/// Loans a buffer for a new input. Fill it, then call `uriel_engine_replace`.
 ///
 /// # Safety
 /// `engine` must be a live handle; `buf` must be valid for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_engine_new_output(
-    engine: *mut Engine,
-    buf: *mut *mut u8,
-) -> Status {
+pub unsafe extern "C" fn uriel_engine_new_output(engine: *mut Engine, buf: *mut *mut u8) -> Status {
     if buf.is_null() {
         return null_argument("buf");
     }
@@ -837,9 +834,9 @@ pub unsafe extern "C" fn gabriel_engine_new_output(
 /// NULL.
 ///
 /// # Safety
-/// As for [`gabriel_engine_drop`]; `output_type` must be NUL-terminated or null.
+/// As for [`uriel_engine_drop`]; `output_type` must be NUL-terminated or null.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_engine_replace(
+pub unsafe extern "C" fn uriel_engine_replace(
     engine: *mut Engine,
     output_type: *const c_char,
     output_len: usize,
@@ -990,7 +987,7 @@ impl EventView {
 /// # Safety
 /// `name` must be NUL-terminated; `subscription` must be valid for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_subscribe_producer(
+pub unsafe extern "C" fn uriel_subscribe_producer(
     name: *const c_char,
     subscription: *mut *mut Subscription,
 ) -> Status {
@@ -1004,7 +1001,7 @@ pub unsafe extern "C" fn gabriel_subscribe_producer(
 /// # Safety
 /// `name` must be NUL-terminated; `subscription` must be valid for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_subscribe_engine(
+pub unsafe extern "C" fn uriel_subscribe_engine(
     name: *const c_char,
     subscription: *mut *mut Subscription,
 ) -> Status {
@@ -1014,17 +1011,17 @@ pub unsafe extern "C" fn gabriel_subscribe_engine(
 /// # Safety
 /// `subscription` must be null or a live handle that is not used afterwards.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_subscription_destroy(subscription: *mut Subscription) -> Status {
+pub unsafe extern "C" fn uriel_subscription_destroy(subscription: *mut Subscription) -> Status {
     unsafe { destroy_handle(subscription) }
 }
 
 /// Waits until an event is ready, or `timeout_ms` passes, and returns `ERR_AGAIN` then. Fetch the
-/// event with `gabriel_subscription_poll`.
+/// event with `uriel_subscription_poll`.
 ///
 /// # Safety
 /// `subscription` must be a live handle.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_subscription_wait(
+pub unsafe extern "C" fn uriel_subscription_wait(
     subscription: *mut Subscription,
     timeout_ms: u32,
 ) -> Status {
@@ -1037,7 +1034,7 @@ pub unsafe extern "C" fn gabriel_subscription_wait(
 /// # Safety
 /// `subscription` must be a live handle; `event` must be valid for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_subscription_poll(
+pub unsafe extern "C" fn uriel_subscription_poll(
     subscription: *mut Subscription,
     event: *mut EventView,
 ) -> Status {
@@ -1092,7 +1089,7 @@ impl ReadInputView {
 /// # Safety
 /// `name` must be NUL-terminated; `reader` must be valid for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_reader_create(
+pub unsafe extern "C" fn uriel_reader_create(
     name: *const c_char,
     reader: *mut *mut Reader,
 ) -> Status {
@@ -1102,17 +1099,17 @@ pub unsafe extern "C" fn gabriel_reader_create(
 /// # Safety
 /// `reader` must be null or a live handle that is not used afterwards.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_reader_destroy(reader: *mut Reader) -> Status {
+pub unsafe extern "C" fn uriel_reader_destroy(reader: *mut Reader) -> Status {
     unsafe { destroy_handle(reader) }
 }
 
 /// Waits until an input is ready, or `timeout_ms` passes, and returns `ERR_AGAIN` then. Fetch the
-/// input with `gabriel_reader_poll`.
+/// input with `uriel_reader_poll`.
 ///
 /// # Safety
 /// `reader` must be a live handle.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_reader_wait(reader: *mut Reader, timeout_ms: u32) -> Status {
+pub unsafe extern "C" fn uriel_reader_wait(reader: *mut Reader, timeout_ms: u32) -> Status {
     let timeout = Duration::from_millis(u64::from(timeout_ms));
     Status::from(unsafe { handle_arg(reader) }.and_then(|r| r.wait(timeout)))
 }
@@ -1122,7 +1119,7 @@ pub unsafe extern "C" fn gabriel_reader_wait(reader: *mut Reader, timeout_ms: u3
 /// # Safety
 /// `reader` must be a live handle; `input` must be valid for writes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gabriel_reader_poll(
+pub unsafe extern "C" fn uriel_reader_poll(
     reader: *mut Reader,
     input: *mut ReadInputView,
 ) -> Status {
@@ -1148,11 +1145,11 @@ mod tests {
         let name = CString::new(unique("producer")).unwrap();
         let mut producer = ptr::null_mut();
         let created =
-            unsafe { gabriel_producer_create(name.as_ptr(), ptr::null(), 8, &mut producer) };
+            unsafe { uriel_producer_create(name.as_ptr(), ptr::null(), 8, &mut producer) };
         assert_eq!(created, Status::Ok);
         let mut session = 0;
         assert_eq!(
-            unsafe { gabriel_producer_session(producer, &mut session) },
+            unsafe { uriel_producer_session(producer, &mut session) },
             Status::Ok
         );
 
@@ -1160,13 +1157,13 @@ mod tests {
         handle.new_input().unwrap();
         let id = handle.publish_input(0, "flow").unwrap();
         assert_eq!(id.session(), session);
-        assert_eq!(unsafe { gabriel_producer_destroy(producer) }, Status::Ok);
+        assert_eq!(unsafe { uriel_producer_destroy(producer) }, Status::Ok);
     }
 
     #[test]
     fn destroy_null_is_ok() {
         assert_eq!(
-            unsafe { gabriel_producer_destroy(ptr::null_mut()) },
+            unsafe { uriel_producer_destroy(ptr::null_mut()) },
             Status::Ok
         );
     }
@@ -1174,7 +1171,7 @@ mod tests {
     #[test]
     fn create_rejects_null_out_pointer() {
         let status =
-            unsafe { gabriel_producer_create(c"p".as_ptr(), ptr::null(), 0, ptr::null_mut()) };
+            unsafe { uriel_producer_create(c"p".as_ptr(), ptr::null(), 0, ptr::null_mut()) };
         assert_eq!(status, Status::ErrInvalid);
     }
 
@@ -1184,15 +1181,15 @@ mod tests {
         let server = CString::new(unique("server")).unwrap();
         let mut client = ptr::null_mut();
         let created = unsafe {
-            gabriel_client_create(name.as_ptr(), server.as_ptr(), ptr::null(), &mut client)
+            uriel_client_create(name.as_ptr(), server.as_ptr(), ptr::null(), &mut client)
         };
         assert_eq!(created, Status::Ok);
 
         let status =
-            unsafe { gabriel_client_add_flow(client, c"flow".as_ptr(), c"[[edges]".as_ptr()) };
+            unsafe { uriel_client_add_flow(client, c"flow".as_ptr(), c"[[edges]".as_ptr()) };
 
         assert_eq!(status, Status::ErrInvalid);
-        assert_eq!(unsafe { gabriel_client_destroy(client) }, Status::Ok);
+        assert_eq!(unsafe { uriel_client_destroy(client) }, Status::Ok);
     }
 
     /// Creates a client named after `name` with `options`, and destroys it if that worked.
@@ -1201,15 +1198,15 @@ mod tests {
         let server = CString::new(unique("server")).unwrap();
         let mut client = ptr::null_mut();
         let status =
-            unsafe { gabriel_client_create(name.as_ptr(), server.as_ptr(), options, &mut client) };
-        assert_eq!(unsafe { gabriel_client_destroy(client) }, Status::Ok);
+            unsafe { uriel_client_create(name.as_ptr(), server.as_ptr(), options, &mut client) };
+        assert_eq!(unsafe { uriel_client_destroy(client) }, Status::Ok);
         status
     }
 
     fn client_options() -> *mut ClientOptions {
         let mut options = ptr::null_mut();
         assert_eq!(
-            unsafe { gabriel_client_options_create(&mut options) },
+            unsafe { uriel_client_options_create(&mut options) },
             Status::Ok
         );
         options
@@ -1218,21 +1215,18 @@ mod tests {
     #[test]
     fn crossing_capacity_needs_a_remote_server() {
         let options = client_options();
-        let set = unsafe { gabriel_client_options_set_remote_crossing_capacity(options, 4) };
+        let set = unsafe { uriel_client_options_set_remote_crossing_capacity(options, 4) };
         assert_eq!(set, Status::Ok);
 
         assert_eq!(create_client(options), Status::ErrInvalid);
-        assert_eq!(
-            unsafe { gabriel_client_options_destroy(options) },
-            Status::Ok
-        );
+        assert_eq!(unsafe { uriel_client_options_destroy(options) }, Status::Ok);
     }
 
     #[test]
     fn zero_crossing_capacity_is_rejected() {
         let options = client_options();
         let set = unsafe {
-            gabriel_client_options_set_remote_server(
+            uriel_client_options_set_remote_server(
                 options,
                 c"127.0.0.1:4433".as_ptr(),
                 ptr::null(),
@@ -1240,10 +1234,10 @@ mod tests {
             )
         };
         assert_eq!(set, Status::Ok);
-        unsafe { gabriel_client_options_set_remote_crossing_capacity(options, 0) };
+        unsafe { uriel_client_options_set_remote_crossing_capacity(options, 0) };
 
         assert_eq!(create_client(options), Status::ErrInvalid);
-        unsafe { gabriel_client_options_destroy(options) };
+        unsafe { uriel_client_options_destroy(options) };
     }
 
     #[test]
@@ -1251,7 +1245,7 @@ mod tests {
         let options = client_options();
 
         let set = unsafe {
-            gabriel_client_options_set_remote_server(
+            uriel_client_options_set_remote_server(
                 options,
                 c"not an address".as_ptr(),
                 ptr::null(),
@@ -1260,42 +1254,42 @@ mod tests {
         };
 
         assert_eq!(set, Status::ErrInvalid);
-        unsafe { gabriel_client_options_destroy(options) };
+        unsafe { uriel_client_options_destroy(options) };
     }
 
     #[test]
     fn identity_dir_needs_a_bind_address() {
         let mut options = ptr::null_mut();
-        unsafe { gabriel_server_options_create(&mut options) };
-        unsafe { gabriel_server_options_set_identity_dir(options, c"/tmp".as_ptr()) };
+        unsafe { uriel_server_options_create(&mut options) };
+        unsafe { uriel_server_options_set_identity_dir(options, c"/tmp".as_ptr()) };
         let name = CString::new(unique("server")).unwrap();
         let mut server = ptr::null_mut();
 
-        let status = unsafe { gabriel_server_create(name.as_ptr(), options, &mut server) };
+        let status = unsafe { uriel_server_create(name.as_ptr(), options, &mut server) };
 
         assert_eq!(status, Status::ErrInvalid);
         assert!(server.is_null());
-        unsafe { gabriel_server_options_destroy(options) };
+        unsafe { uriel_server_options_destroy(options) };
     }
 
     #[test]
     fn abi_version_matches_the_header() {
-        assert_eq!(gabriel_abi_version(), ABI_VERSION);
+        assert_eq!(uriel_abi_version(), ABI_VERSION);
     }
 
     #[test]
     fn subscription_without_events_is_again() {
         let name = CString::new(unique("camera")).unwrap();
         let mut subscription = ptr::null_mut();
-        let created = unsafe { gabriel_subscribe_producer(name.as_ptr(), &mut subscription) };
+        let created = unsafe { uriel_subscribe_producer(name.as_ptr(), &mut subscription) };
         assert_eq!(created, Status::Ok);
         let mut event = std::mem::MaybeUninit::<EventView>::uninit();
 
-        let polled = unsafe { gabriel_subscription_poll(subscription, event.as_mut_ptr()) };
+        let polled = unsafe { uriel_subscription_poll(subscription, event.as_mut_ptr()) };
 
         assert_eq!(polled, Status::ErrAgain);
         assert_eq!(
-            unsafe { gabriel_subscription_destroy(subscription) },
+            unsafe { uriel_subscription_destroy(subscription) },
             Status::Ok
         );
     }
@@ -1304,11 +1298,11 @@ mod tests {
     fn reader_reads_a_published_input() {
         let name = CString::new(unique("camera")).unwrap();
         let mut reader = ptr::null_mut();
-        let created = unsafe { gabriel_reader_create(name.as_ptr(), &mut reader) };
+        let created = unsafe { uriel_reader_create(name.as_ptr(), &mut reader) };
         assert_eq!(created, Status::Ok);
         let mut input = std::mem::MaybeUninit::<ReadInputView>::uninit();
         assert_eq!(
-            unsafe { gabriel_reader_poll(reader, input.as_mut_ptr()) },
+            unsafe { uriel_reader_poll(reader, input.as_mut_ptr()) },
             Status::ErrAgain
         );
 
@@ -1316,8 +1310,8 @@ mod tests {
         let buf = producer.new_input().unwrap();
         buf[0].write(42);
         let id = producer.publish_input(1, "flow").unwrap();
-        assert_eq!(unsafe { gabriel_reader_wait(reader, 200) }, Status::Ok);
-        let polled = unsafe { gabriel_reader_poll(reader, input.as_mut_ptr()) };
+        assert_eq!(unsafe { uriel_reader_wait(reader, 200) }, Status::Ok);
+        let polled = unsafe { uriel_reader_poll(reader, input.as_mut_ptr()) };
 
         assert_eq!(polled, Status::Ok);
         let input = unsafe { input.assume_init() };
@@ -1332,15 +1326,15 @@ mod tests {
             [42]
         );
         assert_eq!(input.lost, 0);
-        assert_eq!(unsafe { gabriel_reader_destroy(reader) }, Status::Ok);
+        assert_eq!(unsafe { uriel_reader_destroy(reader) }, Status::Ok);
     }
 
     #[test]
     fn last_error_says_what_failed() {
         let mut producer = ptr::null_mut();
-        unsafe { gabriel_producer_create(ptr::null(), ptr::null(), 0, &mut producer) };
+        unsafe { uriel_producer_create(ptr::null(), ptr::null(), 0, &mut producer) };
 
-        let message = unsafe { CStr::from_ptr(gabriel_last_error()) };
+        let message = unsafe { CStr::from_ptr(uriel_last_error()) };
 
         assert_eq!(message, c"invalid argument: null string");
     }
@@ -1348,7 +1342,7 @@ mod tests {
     #[test]
     fn create_rejects_null_name() {
         let mut producer = ptr::null_mut();
-        let status = unsafe { gabriel_producer_create(ptr::null(), ptr::null(), 0, &mut producer) };
+        let status = unsafe { uriel_producer_create(ptr::null(), ptr::null(), 0, &mut producer) };
         assert_eq!(status, Status::ErrInvalid);
         assert!(producer.is_null());
     }

@@ -1,6 +1,6 @@
 //! Error type shared by the Rust API.
 
-/// Errors returned by Gabriel operations. A server sends them back to its clients, so they can be
+/// Errors returned by Uriel operations. A server sends them back to its clients, so they can be
 /// serialized.
 #[derive(Debug, thiserror::Error, serde::Serialize, serde::Deserialize)]
 pub enum Error {

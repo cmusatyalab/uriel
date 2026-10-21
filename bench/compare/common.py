@@ -1,4 +1,4 @@
-"""What the processes of both Gabriels share.
+"""What the processes of Uriel and the old Gabriel share.
 
 That is the frames, the measurement, and the lines a process prints to tell
 the runner where it is.

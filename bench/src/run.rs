@@ -19,11 +19,11 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow};
-use gabriel::{
+use rand::{RngExt, SeedableRng, rngs::StdRng};
+use uriel::{
     Client, Engine, Error, Producer, RemoteServerConfig, Server, Subscription, Timestamp,
     spec::Location,
 };
-use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 use crate::{
     record::{EventRow, InputRow, WorkRow},

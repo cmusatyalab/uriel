@@ -1,9 +1,9 @@
 # Cross-builds the Python package's wheel for an aarch64 device with Ubuntu 20.04, such as a
 # Particle Tachyon: glibc 2.31. Build the image, then the wheel, from the repository root:
 #
-#   docker build -t gabriel-wheel-aarch64 -f python/Dockerfile.aarch64 python
+#   docker build -t uriel-wheel-aarch64 -f python/Dockerfile.aarch64 python
 #   docker run --rm -u $(id -u):$(id -g) -v $PWD:/src -w /src/python \
-#       -e CARGO_TARGET_DIR=/src/target/aarch64 gabriel-wheel-aarch64 \
+#       -e CARGO_TARGET_DIR=/src/target/aarch64 uriel-wheel-aarch64 \
 #       uv build -o /src/target/wheels
 #
 # uv builds the sdist, then the wheel from it, so the wheel has only the files git tracks.

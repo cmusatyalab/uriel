@@ -2,7 +2,7 @@
 
 import os
 
-from gabriel._ffi import LockedHandle, check, create, cstr, ffi, lib, options
+from uriel._ffi import LockedHandle, check, create, cstr, ffi, lib, options
 
 
 class Server(LockedHandle):
@@ -24,21 +24,21 @@ class Server(LockedHandle):
         first time. With None, it makes a new certificate each time it starts."""
         with options("server") as opts:
             if bind_addr is not None:
-                check(lib.gabriel_server_options_set_bind_addr(opts, cstr(bind_addr)))
+                check(lib.uriel_server_options_set_bind_addr(opts, cstr(bind_addr)))
             if identity_dir is not None:
                 check(
-                    lib.gabriel_server_options_set_identity_dir(opts, cstr(os.fspath(identity_dir)))
+                    lib.uriel_server_options_set_identity_dir(opts, cstr(os.fspath(identity_dir)))
                 )
-            handle = create(lib.gabriel_server_create, "gabriel_server_t **", cstr(name), opts)
-        super().__init__(handle, lib.gabriel_server_destroy)
+            handle = create(lib.uriel_server_create, "uriel_server_t **", cstr(name), opts)
+        super().__init__(handle, lib.uriel_server_destroy)
 
     def add_engine(self, name: str) -> None:
         """Serves the engine `name`, which must exist (`Engine`)."""
-        self._call(lib.gabriel_server_add_engine, cstr(name))
+        self._call(lib.uriel_server_add_engine, cstr(name))
 
     def remove_engine(self, name: str) -> None:
         """Stops serving the engine `name`."""
-        self._call(lib.gabriel_server_remove_engine, cstr(name))
+        self._call(lib.uriel_server_remove_engine, cstr(name))
 
     @property
     def remote_port(self) -> int:
@@ -46,7 +46,7 @@ class Server(LockedHandle):
         address."""
         port = ffi.new("uint16_t *")
         with self._lock:
-            check(lib.gabriel_server_remote_port(self._live(), port))
+            check(lib.uriel_server_remote_port(self._live(), port))
         return port[0]
 
     @property
@@ -55,5 +55,5 @@ class Server(LockedHandle):
         without a bind address."""
         certificate, length = ffi.new("const uint8_t **"), ffi.new("size_t *")
         with self._lock:
-            check(lib.gabriel_server_certificate(self._live(), certificate, length))
+            check(lib.uriel_server_certificate(self._live(), certificate, length))
             return bytes(ffi.buffer(certificate[0], length[0]))

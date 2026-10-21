@@ -1,7 +1,7 @@
-package gabriel
+package uriel
 
 // #include <stdlib.h>
-// #include <gabriel/gabriel.h>
+// #include <uriel/uriel.h>
 import "C"
 
 import (
@@ -16,22 +16,22 @@ type EventKind int
 
 const (
 	// EventAccepted: a server received the input and made one offer per target engine.
-	EventAccepted EventKind = C.GABRIEL_EVENT_KIND_T_ACCEPTED
+	EventAccepted EventKind = C.URIEL_EVENT_KIND_T_ACCEPTED
 	// EventSent: the offer was sent to the engine; a result may come.
-	EventSent EventKind = C.GABRIEL_EVENT_KIND_T_SENT
+	EventSent EventKind = C.URIEL_EVENT_KIND_T_SENT
 	// EventResult: the engine finished the input. Outcome says what it forwarded.
-	EventResult EventKind = C.GABRIEL_EVENT_KIND_T_RESULT
+	EventResult EventKind = C.URIEL_EVENT_KIND_T_RESULT
 	// EventSkipped: a newer input replaced the offer before it was sent.
-	EventSkipped EventKind = C.GABRIEL_EVENT_KIND_T_SKIPPED
+	EventSkipped EventKind = C.URIEL_EVENT_KIND_T_SKIPPED
 	// EventTimedOut: the engine did not answer in time, or was lost.
-	EventTimedOut EventKind = C.GABRIEL_EVENT_KIND_T_TIMED_OUT
+	EventTimedOut EventKind = C.URIEL_EVENT_KIND_T_TIMED_OUT
 	// EventDisconnected: the client lost its connection to a server of the flow. Every offer on that
 	// server ended with it. It names no input.
-	EventDisconnected EventKind = C.GABRIEL_EVENT_KIND_T_DISCONNECTED
+	EventDisconnected EventKind = C.URIEL_EVENT_KIND_T_DISCONNECTED
 	// EventDerived: a result an engine derived from subscribed events. It answers no offer.
-	EventDerived EventKind = C.GABRIEL_EVENT_KIND_T_DERIVED
+	EventDerived EventKind = C.URIEL_EVENT_KIND_T_DERIVED
 	// EventLost: events were lost before the next one, because the subscriber fell behind.
-	EventLost EventKind = C.GABRIEL_EVENT_KIND_T_LOST
+	EventLost EventKind = C.URIEL_EVENT_KIND_T_LOST
 )
 
 func (k EventKind) String() string {
@@ -62,11 +62,11 @@ type Outcome int
 
 const (
 	// OutcomeDrop: nothing; the input ended at the engine.
-	OutcomeDrop Outcome = C.GABRIEL_OUTCOME_T_DROP
+	OutcomeDrop Outcome = C.URIEL_OUTCOME_T_DROP
 	// OutcomeForward: the input, unchanged.
-	OutcomeForward Outcome = C.GABRIEL_OUTCOME_T_FORWARD
+	OutcomeForward Outcome = C.URIEL_OUTCOME_T_FORWARD
 	// OutcomeReplace: a new input, in place of the input.
-	OutcomeReplace Outcome = C.GABRIEL_OUTCOME_T_REPLACE
+	OutcomeReplace Outcome = C.URIEL_OUTCOME_T_REPLACE
 )
 
 func (o Outcome) String() string {
@@ -115,7 +115,7 @@ type Event struct {
 // A Subscription must be used and closed in the goroutine that created it (see Threads in the
 // package documentation).
 type Subscription struct {
-	handle *C.gabriel_subscription_t
+	handle *C.uriel_subscription_t
 	thread thread
 }
 
@@ -126,7 +126,7 @@ func SubscribeProducer(name string) (*Subscription, error) {
 	defer C.free(unsafe.Pointer(cName))
 	t := lockThread()
 	s := &Subscription{thread: t}
-	err := call(func() C.gabriel_status_t { return C.gabriel_subscribe_producer(cName, &s.handle) })
+	err := call(func() C.uriel_status_t { return C.uriel_subscribe_producer(cName, &s.handle) })
 	if err != nil {
 		t.release()
 		return nil, err
@@ -141,7 +141,7 @@ func SubscribeEngine(name string) (*Subscription, error) {
 	defer C.free(unsafe.Pointer(cName))
 	t := lockThread()
 	s := &Subscription{thread: t}
-	err := call(func() C.gabriel_status_t { return C.gabriel_subscribe_engine(cName, &s.handle) })
+	err := call(func() C.uriel_status_t { return C.uriel_subscribe_engine(cName, &s.handle) })
 	if err != nil {
 		t.release()
 		return nil, err
@@ -162,8 +162,8 @@ func (s *Subscription) Wait(timeout time.Duration) error {
 	if err := s.check(); err != nil {
 		return err
 	}
-	return call(func() C.gabriel_status_t {
-		return C.gabriel_subscription_wait(s.handle, milliseconds(timeout))
+	return call(func() C.uriel_status_t {
+		return C.uriel_subscription_wait(s.handle, milliseconds(timeout))
 	})
 }
 
@@ -172,15 +172,15 @@ func (s *Subscription) Poll() (Event, error) {
 	if err := s.check(); err != nil {
 		return Event{}, err
 	}
-	var view C.gabriel_event_t
-	if err := call(func() C.gabriel_status_t { return C.gabriel_subscription_poll(s.handle, &view) }); err != nil {
+	var view C.uriel_event_t
+	if err := call(func() C.uriel_status_t { return C.uriel_subscription_poll(s.handle, &view) }); err != nil {
 		return Event{}, err
 	}
 	return eventOf(&view), nil
 }
 
 // eventOf copies an event read through the C ABI.
-func eventOf(view *C.gabriel_event_t) Event {
+func eventOf(view *C.uriel_event_t) Event {
 	return Event{
 		Kind:        EventKind(view.kind),
 		Lost:        uint64(view.lost),
@@ -206,7 +206,7 @@ func (s *Subscription) Close() error {
 	if err := s.check(); err != nil {
 		return err
 	}
-	err := call(func() C.gabriel_status_t { return C.gabriel_subscription_destroy(s.handle) })
+	err := call(func() C.uriel_status_t { return C.uriel_subscription_destroy(s.handle) })
 	s.handle = nil
 	s.thread.release()
 	return err

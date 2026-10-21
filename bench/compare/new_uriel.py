@@ -1,8 +1,8 @@
-"""The new Gabriel's processes.
+"""Uriel's processes.
 
 Frames go from the app to the engine through shared memory.
 
-    python new_gabriel.py server|engine|app --resolution 720p ...
+    python new_uriel.py server|engine|app --resolution 720p ...
 
 The runner (compare.py) starts them.
 """
@@ -12,7 +12,7 @@ import signal
 import time
 
 import common
-import gabriel
+import uriel
 
 SERVER = "compare-server"
 ENGINE = "compare-engine"
@@ -37,7 +37,7 @@ timeout = "{common.WAIT}s"
 
 def server() -> None:
     """Serves the engine until stopped."""
-    with gabriel.Server(SERVER) as server:
+    with uriel.Server(SERVER) as server:
         server.add_engine(ENGINE)
         common.say(common.READY)
         signal.pause()
@@ -45,7 +45,7 @@ def server() -> None:
 
 def engine() -> None:
     """Answers each frame at once, until stopped."""
-    with gabriel.Engine(ENGINE, max_output_size=common.RESULT_SIZE) as engine:
+    with uriel.Engine(ENGINE, max_output_size=common.RESULT_SIZE) as engine:
         common.say(common.READY)
         for _ in engine:
             engine.drop(result=common.RESULT)
@@ -55,9 +55,9 @@ def app(resolution: str, recorder: common.Recorder) -> None:
     """Sends a frame, waits for its result, and sends the next."""
     frame = common.make_frame(resolution)
     with (
-        gabriel.Producer(PRODUCER, max_input_size=frame.nbytes) as producer,
-        gabriel.Subscription(PRODUCER) as events,
-        gabriel.Client(CLIENT, SERVER) as client,
+        uriel.Producer(PRODUCER, max_input_size=frame.nbytes) as producer,
+        uriel.Subscription(PRODUCER) as events,
+        uriel.Client(CLIENT, SERVER) as client,
     ):
         client.add_producer(PRODUCER)
         client.add_flow(FLOW, FLOW_SPEC)
@@ -68,13 +68,13 @@ def app(resolution: str, recorder: common.Recorder) -> None:
             recorder.record(time.perf_counter_ns() - sent)
 
 
-def wait_for_result(events: gabriel.Subscription) -> None:
+def wait_for_result(events: uriel.Subscription) -> None:
     """Waits for the next result, skipping other events."""
     while True:
         event = events.next(common.WAIT)
         if event is None:
             raise TimeoutError("no result came")
-        if event.kind == gabriel.EventKind.RESULT:
+        if event.kind == uriel.EventKind.RESULT:
             return
 
 

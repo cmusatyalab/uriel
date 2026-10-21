@@ -1,5 +1,5 @@
 # On a Tachyon: a camera at 30 fps feeds YOLO alone, the QNN inference server running as an
-# external Gabriel engine on the NPU. Start it before the run:
+# external Uriel engine on the NPU. Start it before the run:
 #
 #   qnn-sample-app --model <yolo.so> --backend libQnnHtp.so --gabriel_engine yolo
 #

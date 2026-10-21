@@ -1,4 +1,4 @@
-// Command pipeline runs a small Gabriel pipeline on this machine, all in one process.
+// Command pipeline runs a small Uriel pipeline on this machine, all in one process.
 //
 // A camera makes 30 frames a second of a bright square moving over a dark background. A motion
 // filter passes a frame on only if it differs enough from the last frame it passed, and a detector
@@ -23,7 +23,7 @@ import (
 	"syscall"
 	"time"
 
-	gabriel "github.com/cmusatyalab/gabriel/go"
+	uriel "github.com/cmusatyalab/uriel/go"
 )
 
 // The names of the parts of the pipeline. They are global on this machine.
@@ -112,7 +112,7 @@ func main() {
 }
 
 func run(ctx context.Context) error {
-	server, err := gabriel.NewServer(serverName)
+	server, err := uriel.NewServer(serverName)
 	if err != nil {
 		return err
 	}
@@ -122,7 +122,7 @@ func run(ctx context.Context) error {
 	done := make(chan error, 2)
 	for _, engine := range []struct {
 		name    string
-		process func(*gabriel.Engine, gabriel.Input) error
+		process func(*uriel.Engine, uriel.Input) error
 	}{
 		{filterName, newMotionFilter().process},
 		{detectorName, detect},
@@ -137,7 +137,7 @@ func run(ctx context.Context) error {
 		}
 	}
 
-	client, err := gabriel.NewClient(clientName, serverName)
+	client, err := uriel.NewClient(clientName, serverName)
 	if err != nil {
 		return err
 	}
@@ -170,8 +170,8 @@ func run(ctx context.Context) error {
 
 // serve runs the engine name until ctx is done, giving process each input. It reports on ready
 // once the engine exists.
-func serve(ctx context.Context, name string, process func(*gabriel.Engine, gabriel.Input) error, ready chan<- error) error {
-	engine, err := gabriel.NewEngine(name, resultType, maxResultSize)
+func serve(ctx context.Context, name string, process func(*uriel.Engine, uriel.Input) error, ready chan<- error) error {
+	engine, err := uriel.NewEngine(name, resultType, maxResultSize)
 	ready <- err
 	if err != nil {
 		return err
@@ -197,7 +197,7 @@ func newMotionFilter() *motionFilter {
 	return &motionFilter{}
 }
 
-func (f *motionFilter) process(engine *gabriel.Engine, input gabriel.Input) error {
+func (f *motionFilter) process(engine *uriel.Engine, input uriel.Input) error {
 	if f.last != nil && meanChange(f.last, input.Data) < motionThreshold {
 		return engine.Drop(nil)
 	}
@@ -218,7 +218,7 @@ func meanChange(a, b []byte) float64 {
 }
 
 // detect finds the bright square, and reports its box as the result.
-func detect(engine *gabriel.Engine, input gabriel.Input) error {
+func detect(engine *uriel.Engine, input uriel.Input) error {
 	time.Sleep(detectorWork)
 	box := Box{X: frameWidth, Y: frameHeight}
 	right, bottom := -1, -1
@@ -244,7 +244,7 @@ func detect(engine *gabriel.Engine, input gabriel.Input) error {
 // film publishes frames from the camera until ctx is done. It reports on ready once the camera
 // exists.
 func film(ctx context.Context, ready chan<- error) error {
-	camera, err := gabriel.NewProducer(cameraName, "", frameSize)
+	camera, err := uriel.NewProducer(cameraName, "", frameSize)
 	ready <- err
 	if err != nil {
 		return err
@@ -264,7 +264,7 @@ func film(ctx context.Context, ready chan<- error) error {
 			return err
 		}
 		draw(buf[:frameSize], frame)
-		at := gabriel.Now()
+		at := uriel.Now()
 		seq, err := camera.Publish(flowName, frameSize)
 		if err != nil {
 			return err
@@ -290,7 +290,7 @@ func draw(buf []byte, n int) {
 // watch prints what happens to the camera's frames until ctx is done. It reports on ready once it
 // is subscribed.
 func watch(ctx context.Context, ready chan<- error) error {
-	events, err := gabriel.SubscribeProducer(cameraName)
+	events, err := uriel.SubscribeProducer(cameraName)
 	ready <- err
 	if err != nil {
 		return err
@@ -304,7 +304,7 @@ func watch(ctx context.Context, ready chan<- error) error {
 			return ignoreDone(ctx, err)
 		}
 		counts[event.Engine+" "+event.Kind.String()]++
-		if event.Kind != gabriel.EventResult || event.Engine != detectorName || len(event.Result) == 0 {
+		if event.Kind != uriel.EventResult || event.Engine != detectorName || len(event.Result) == 0 {
 			continue
 		}
 		var box Box
@@ -323,7 +323,7 @@ func watch(ctx context.Context, ready chan<- error) error {
 			return true
 		})
 		fmt.Printf("frame %4d: square at (%3d, %3d), frame %v old\n",
-			event.ID.Seq, box.X, box.Y, gabriel.Now().Sub(at.(gabriel.Timestamp)).Round(time.Millisecond))
+			event.ID.Seq, box.X, box.Y, uriel.Now().Sub(at.(uriel.Timestamp)).Round(time.Millisecond))
 	}
 }
 

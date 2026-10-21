@@ -1,4 +1,4 @@
-package gabriel
+package uriel
 
 import (
 	"context"

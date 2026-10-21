@@ -1,4 +1,4 @@
-//! Logging. Gabriel logs through [`tracing`]: failures its threads carry on after, lost engines and
+//! Logging. Uriel logs through [`tracing`]: failures its threads carry on after, lost engines and
 //! servers, and flows installed and removed. Nothing per input is logged. A Rust app installs any
 //! `tracing` subscriber it likes; [`init`] installs a simple one, mainly for C apps.
 
@@ -10,7 +10,7 @@ use crate::{Error, Result};
 const DEFAULT_FILTER: &str = "warn";
 
 /// Prints the log to standard error. `filter` picks what is printed, in the syntax of `RUST_LOG`,
-/// e.g. `"info"` or `"gabriel=debug"`. With `None`, `RUST_LOG` picks, or warnings and errors are
+/// e.g. `"info"` or `"uriel=debug"`. With `None`, `RUST_LOG` picks, or warnings and errors are
 /// printed if it is unset. Fails if the filter is malformed, or a subscriber is already installed.
 pub fn init(filter: Option<&str>) -> Result<()> {
     let filter = match filter {
@@ -34,7 +34,7 @@ mod tests {
     #[test]
     fn malformed_filter_is_rejected() {
         assert!(matches!(
-            init(Some("gabriel=loud")),
+            init(Some("uriel=loud")),
             Err(Error::InvalidArgument(_))
         ));
     }

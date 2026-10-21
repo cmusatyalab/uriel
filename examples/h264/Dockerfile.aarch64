@@ -2,10 +2,10 @@
 # Tachyon: glibc 2.31 and GStreamer 1.16. Build the image, then the engines, from the repository
 # root:
 #
-#   docker build -t gabriel-h264-aarch64 -f examples/h264/Dockerfile.aarch64 examples/h264
+#   docker build -t uriel-h264-aarch64 -f examples/h264/Dockerfile.aarch64 examples/h264
 #   docker run --rm -u $(id -u):$(id -g) -v $PWD:/src -w /src \
-#       -e CARGO_TARGET_DIR=/src/target/aarch64 gabriel-h264-aarch64 \
-#       cargo build --release --target aarch64-unknown-linux-gnu -p gabriel-h264
+#       -e CARGO_TARGET_DIR=/src/target/aarch64 uriel-h264-aarch64 \
+#       cargo build --release --target aarch64-unknown-linux-gnu -p uriel-h264
 #
 # A target directory of its own keeps its build scripts, linked against glibc 2.31, apart from
 # the host's. The engines are in target/aarch64/aarch64-unknown-linux-gnu/release/. They need
@@ -35,7 +35,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
             --target aarch64-unknown-linux-gnu \
     && chmod -R a+rwX /cargo /rustup
 
-# cargo-c installs Gabriel's library with its header and pkg-config file, for the Go bindings.
+# cargo-c installs Uriel's library with its header and pkg-config file, for the Go bindings.
 # Its release is a static binary, so it runs on this older Ubuntu.
 ARG CARGO_C_VERSION=0.10.26
 RUN curl --proto '=https' --tlsv1.2 -sSfL \

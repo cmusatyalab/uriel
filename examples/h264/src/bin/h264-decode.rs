@@ -1,4 +1,4 @@
-//! A Gabriel engine that decodes the `EncodedVideoFrame`s of `h264-encode`, and emits each as the
+//! A Uriel engine that decodes the `EncodedVideoFrame`s of `h264-encode`, and emits each as the
 //! raw RGB frame it was encoded from, of the same payload type, e.g. a SteelEagle `RawFrame` for a
 //! detector.
 //!
@@ -11,14 +11,14 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use gabriel::Engine;
-use gabriel_h264::{
-    DecodeResult, EncodedVideoFrame, Pipeline, RAW_FRAME_DATA_FIELD, RGB_CHANNELS, RawFrameView,
-    WAIT_TIMEOUT, stop_on_signal, stopped, type_name,
-};
 use gstreamer::{self as gst};
 use gstreamer_video::VideoInfo;
 use protobuf::{CodedOutputStream, Message, rt::WireType};
+use uriel::Engine;
+use uriel_h264::{
+    DecodeResult, EncodedVideoFrame, Pipeline, RAW_FRAME_DATA_FIELD, RGB_CHANNELS, RawFrameView,
+    WAIT_TIMEOUT, stop_on_signal, stopped, type_name,
+};
 
 /// Software libav, on one thread: frame threading holds frames back.
 const DEFAULT_DECODER: &str = "avdec_h264 max-threads=1";
@@ -30,7 +30,7 @@ const PTS_STEP: gst::ClockTime = gst::ClockTime::MSECOND;
 #[derive(Parser)]
 #[command(
     version,
-    about = "Decodes H.264 frames to raw RGB frames, as a Gabriel engine"
+    about = "Decodes H.264 frames to raw RGB frames, as a Uriel engine"
 )]
 struct Args {
     /// The engine's name.
@@ -137,7 +137,7 @@ fn main() -> Result<()> {
     let mut expected: Option<u64> = None;
     while !stopped(&stop) {
         match engine.wait(WAIT_TIMEOUT) {
-            Ok(()) | Err(gabriel::Error::Again) => {}
+            Ok(()) | Err(uriel::Error::Again) => {}
             Err(e) => return Err(e.into()),
         }
         let (seq, encoded) = match engine.poll_input() {
@@ -147,7 +147,7 @@ fn main() -> Result<()> {
                     .then(|| EncodedVideoFrame::parse_from_bytes(input.data).ok())
                     .flatten(),
             ),
-            Err(gabriel::Error::Again) => continue,
+            Err(uriel::Error::Again) => continue,
             Err(e) => return Err(e.into()),
         };
         let started = Instant::now();

@@ -1,4 +1,4 @@
-//! The clock of Gabriel's timestamps. Every event carries the time it happened, so an app can
+//! The clock of Uriel's timestamps. Every event carries the time it happened, so an app can
 //! tell how long its inputs waited and where.
 //!
 //! Timestamps are read from the monotonic clock (`CLOCK_MONOTONIC` on Linux), which every process

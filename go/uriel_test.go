@@ -1,4 +1,4 @@
-package gabriel
+package uriel
 
 import (
 	"bytes"
@@ -183,7 +183,7 @@ func TestErrorSaysWhatFailed(t *testing.T) {
 	if !errors.Is(err, ErrInvalid) {
 		t.Fatalf("got %v, want ErrInvalid", err)
 	}
-	if !strings.HasPrefix(err.Error(), "gabriel: invalid argument: ") {
+	if !strings.HasPrefix(err.Error(), "uriel: invalid argument: ") {
 		t.Errorf("got message %q, want one that says what was invalid", err)
 	}
 }

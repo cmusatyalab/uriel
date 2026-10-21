@@ -1,4 +1,4 @@
-//! Gabriel: token-based flow control between producers and engines, built on
+//! Uriel: token-based flow control between producers and engines, built on
 //! iceoryx2 for local transport through shared memory.
 //!
 //! The idiomatic Rust API lives in the [`producer`], [`client`], [`server`]

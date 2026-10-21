@@ -8,7 +8,7 @@
 //! namespace, which needs no root:
 //!
 //! ```text
-//! unshare --user --map-root-user --net target/release/gabriel-bench bench/runs/remote.toml
+//! unshare --user --map-root-user --net target/release/uriel-bench bench/runs/remote.toml
 //! ```
 
 use std::{fs, process::Command, time::Duration};
@@ -62,7 +62,7 @@ fn ensure_own_namespace() -> Result<()> {
         others.is_empty(),
         "the run emulates a network on loopback, which would slow every program here (this \
          namespace also has {others:?}); run it in a network namespace of its own: {UNSHARE} \
-         target/release/gabriel-bench <run>"
+         target/release/uriel-bench <run>"
     );
     Ok(())
 }

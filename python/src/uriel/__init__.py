@@ -1,4 +1,4 @@
-"""Python bindings for Gabriel, through its C ABI (rust/include/gabriel/gabriel.h).
+"""Python bindings for Uriel, through its C ABI (rust/include/uriel/uriel.h).
 
 A producer publishes inputs on a flow. A client takes the producer's inputs and offers them to the
 flow's engines, which a server serves. Each engine processes one input at a time and reports one
@@ -11,39 +11,39 @@ them; using one from another thread raises `WrongThreadError`. A `Client` and a 
 used from any thread. Close every handle when done with it, or use it in a `with` block.
 """
 
-from gabriel._ffi import check as _check
-from gabriel._ffi import cstr as _cstr
-from gabriel._ffi import lib as _lib
-from gabriel.client import Client, RemoteServer
-from gabriel.engine import Engine
-from gabriel.errors import (
+from uriel._ffi import check as _check
+from uriel._ffi import cstr as _cstr
+from uriel._ffi import lib as _lib
+from uriel.client import Client, RemoteServer
+from uriel.engine import Engine
+from uriel.errors import (
     AgainError,
     ClosedError,
-    GabrielError,
     InternalError,
     InvalidArgumentError,
     SizeExceededError,
+    UrielError,
     WrongThreadError,
 )
-from gabriel.producer import Producer
-from gabriel.reader import Reader
-from gabriel.server import Server
-from gabriel.subscription import Subscription
-from gabriel.types import Event, EventKind, Input, InputId, Outcome, ReadInput
+from uriel.producer import Producer
+from uriel.reader import Reader
+from uriel.server import Server
+from uriel.subscription import Subscription
+from uriel.types import Event, EventKind, Input, InputId, Outcome, ReadInput
 
 
 def init_log(filter: str | None = None) -> None:
-    """Prints Gabriel's log to standard error. `filter` picks what is printed, in the syntax of
-    RUST_LOG, e.g. "info" or "gabriel=debug". If it is None, RUST_LOG picks, or warnings and errors
+    """Prints Uriel's log to standard error. `filter` picks what is printed, in the syntax of
+    RUST_LOG, e.g. "info" or "uriel=debug". If it is None, RUST_LOG picks, or warnings and errors
     are printed if that is unset. Call it once, before anything else."""
-    _check(_lib.gabriel_log_init(_cstr(filter)))
+    _check(_lib.uriel_log_init(_cstr(filter)))
 
 
 def serve_metrics(addr: str) -> None:
-    """Serves the metrics of Gabriel's clients and servers in this process to Prometheus, at
+    """Serves the metrics of Uriel's clients and servers in this process to Prometheus, at
     http://<addr>/metrics, e.g. "0.0.0.0:9464". Call it once, before creating clients and
     servers."""
-    _check(_lib.gabriel_metrics_serve(_cstr(addr)))
+    _check(_lib.uriel_metrics_serve(_cstr(addr)))
 
 
 __all__ = [
@@ -53,7 +53,6 @@ __all__ = [
     "Engine",
     "Event",
     "EventKind",
-    "GabrielError",
     "Input",
     "InputId",
     "InternalError",
@@ -66,6 +65,7 @@ __all__ = [
     "Server",
     "SizeExceededError",
     "Subscription",
+    "UrielError",
     "WrongThreadError",
     "init_log",
     "serve_metrics",

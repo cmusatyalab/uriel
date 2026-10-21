@@ -1,7 +1,7 @@
 [project]
-name = "gabriel"
+name = "uriel"
 version = "0.1.0"
-description = "Python bindings for Gabriel, through its C ABI"
+description = "Python bindings for Uriel, through its C ABI"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
@@ -11,7 +11,7 @@ dependencies = ["cffi>=1.17"]
 dev = ["pytest>=8", "numpy>=2"]
 
 [build-system]
-# maturin runs cffi to write the declarations of gabriel._native.
+# maturin runs cffi to write the declarations of uriel._native.
 requires = ["maturin>=1.9,<2", "cffi>=1.17"]
 build-backend = "maturin"
 
@@ -19,7 +19,7 @@ build-backend = "maturin"
 manifest-path = "../rust/Cargo.toml"
 bindings = "cffi"
 python-source = "src"
-module-name = "gabriel._native"
+module-name = "uriel._native"
 
 [tool.uv]
 # uv rebuilds the package when these change, not only when Python files do.

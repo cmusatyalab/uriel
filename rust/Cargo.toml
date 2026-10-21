@@ -1,15 +1,15 @@
 [package]
-name = "gabriel"
+name = "uriel"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
-description = "Gabriel: token-based flow control over iceoryx2, exposed through a C ABI"
+description = "Uriel: token-based flow control over iceoryx2, exposed through a C ABI"
 
 [lib]
 crate-type = ["rlib", "cdylib", "staticlib"]
 
-# cargo cinstall (cargo-c) installs the library as a C library: libgabriel, its header, and a
-# gabriel.pc for pkg-config, which the Go bindings link through.
+# cargo cinstall (cargo-c) installs the library as a C library: liburiel, its header, and a
+# uriel.pc for pkg-config, which the Go bindings link through.
 [features]
 # Marks this as the workspace's C library for cargo-c; it enables nothing.
 capi = []
@@ -19,12 +19,12 @@ capi = []
 generation = false
 
 [package.metadata.capi.pkg_config]
-# Callers include <gabriel/gabriel.h>, so the include path is the directory above the header's.
+# Callers include <uriel/uriel.h>, so the include path is the directory above the header's.
 strip_include_path_components = 1
 
 [package.metadata.capi.install.include]
-# Installed to include/gabriel/, the header's default subdirectory.
-asset = [{ from = "include/gabriel/gabriel.h" }]
+# Installed to include/uriel/, the header's default subdirectory.
+asset = [{ from = "include/uriel/uriel.h" }]
 
 [dependencies]
 iceoryx2 = "0.10"

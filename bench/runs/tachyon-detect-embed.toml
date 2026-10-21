@@ -1,5 +1,5 @@
 # On a Tachyon: a camera at 30 fps feeds YOLO, which passes frames with objects to PatchCore.
-# Both are the QNN inference server running as external Gabriel engines on the one NPU, so start
+# Both are the QNN inference server running as external Uriel engines on the one NPU, so start
 # them before the run:
 #
 #   qnn-sample-app --model <yolo.so> --backend libQnnHtp.so --gabriel_engine yolo

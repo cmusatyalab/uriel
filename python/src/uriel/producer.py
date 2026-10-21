@@ -1,7 +1,7 @@
 """Producers: publish inputs."""
 
-from gabriel._ffi import ThreadHandle, check, create, cstr, ffi, lib, view
-from gabriel.errors import SizeExceededError
+from uriel._ffi import ThreadHandle, check, create, cstr, ffi, lib, view
+from uriel.errors import SizeExceededError
 
 
 class Producer(ThreadHandle):
@@ -17,16 +17,16 @@ class Producer(ThreadHandle):
         each input's payload type. A client takes its inputs once it adds the producer
         (`Client.add_producer`)."""
         handle = create(
-            lib.gabriel_producer_create,
-            "gabriel_producer_t **",
+            lib.uriel_producer_create,
+            "uriel_producer_t **",
             cstr(name),
             cstr(input_type),
             max_input_size,
         )
-        super().__init__(handle, lib.gabriel_producer_destroy)
+        super().__init__(handle, lib.uriel_producer_destroy)
         self._max_input_size = max_input_size
         session = ffi.new("uint64_t *")
-        check(lib.gabriel_producer_session(handle, session))
+        check(lib.uriel_producer_session(handle, session))
         self._session = session[0]
 
     @property
@@ -38,14 +38,14 @@ class Producer(ThreadHandle):
         """Returns a buffer in shared memory for the next input, of the producer's maximum input
         size. Write the input into it, then publish it with `publish`."""
         out = ffi.new("uint8_t **")
-        check(lib.gabriel_producer_new_input(self._live(), out))
+        check(lib.uriel_producer_new_input(self._live(), out))
         return view(out[0], self._max_input_size, writable=True)
 
     def publish(self, flow: str, length: int) -> int:
         """Publishes the first `length` bytes of the loaned buffer on `flow`, and returns the
         input's sequence number, which the events about the input carry."""
         seq = ffi.new("uint64_t *")
-        check(lib.gabriel_producer_publish_input(self._live(), length, cstr(flow), seq))
+        check(lib.uriel_producer_publish_input(self._live(), length, cstr(flow), seq))
         return seq[0]
 
     def send(self, flow: str, data) -> int:

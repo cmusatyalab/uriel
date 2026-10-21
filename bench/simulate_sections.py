@@ -13,7 +13,7 @@ one copy of the file per count, e.g.
 
     for n in 1 2 3 4 7; do
       sed "s/^tokens = .*/tokens = $n/" bench/runs/slow-end.toml > t$n.toml
-      cargo run --release -p gabriel-bench -- t$n.toml --out out-$n
+      cargo run --release -p uriel-bench -- t$n.toml --out out-$n
     done
     python3 bench/simulate_sections.py out-*
 

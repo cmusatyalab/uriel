@@ -1,11 +1,11 @@
-//! Runs a Gabriel server that remote clients reach over the network, and serves the engines on
+//! Runs a Uriel server that remote clients reach over the network, and serves the engines on
 //! its machine to them, e.g. on an edge server, next to engines in their own containers.
 //!
 //! The server keeps its certificate in its identity directory, so that it stays the same across
 //! restarts. Give clients a copy of it. The server stops on Ctrl-C or SIGTERM.
 //!
-//! The server also serves Prometheus metrics: its engines' (see `metrics`), and Gabriel's own
-//! (see `gabriel::metrics`).
+//! The server also serves Prometheus metrics: its engines' (see `metrics`), and Uriel's own
+//! (see `uriel::metrics`).
 
 mod metrics;
 
@@ -20,14 +20,14 @@ use std::{
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use gabriel::{Server, logging, server::CERTIFICATE_FILE};
 use signal_hook::{
     consts::{SIGINT, SIGTERM},
     iterator::Signals,
 };
+use uriel::{Server, logging, server::CERTIFICATE_FILE};
 
 /// Where the server accepts remote clients unless told otherwise: every address, on the port
-/// Gabriel's examples use.
+/// Uriel's examples use.
 const DEFAULT_LISTEN_ADDR: &str = "0.0.0.0:4433";
 /// Where the server serves its metrics unless told otherwise: the port the Python Gabriel server
 /// served them on.
@@ -37,7 +37,7 @@ const DEFAULT_METRICS_ADDR: &str = "0.0.0.0:8000";
 #[command(version, about)]
 struct Args {
     /// The server's name. Engines and local clients on this machine find the server by it.
-    #[arg(long, default_value = "gabriel")]
+    #[arg(long, default_value = "uriel")]
     name: String,
 
     /// The address and port to accept remote clients on.
@@ -72,7 +72,7 @@ fn main() -> Result<()> {
     let mut signals = Signals::new([SIGINT, SIGTERM])?;
 
     // Before the server, so that the metrics it registers are recorded.
-    gabriel::metrics::serve(args.metrics_listen)
+    uriel::metrics::serve(args.metrics_listen)
         .with_context(|| format!("failed to serve metrics on {}", args.metrics_listen))?;
     let mut server = Server::new(&args.name, Some(&args.listen), Some(&args.identity_dir))
         .context("failed to start the server")?;

@@ -1,16 +1,16 @@
 [package]
-name = "gabriel-bench"
+name = "uriel-bench"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
-description = "Runs a Gabriel flow with synthetic engines and records when each input reached each stage"
+description = "Runs a Uriel flow with synthetic engines and records when each input reached each stage"
 publish = false
 
 [dependencies]
 anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive"] }
 csv = "1.4.0"
-gabriel = { path = "../rust" }
+uriel = { path = "../rust" }
 humantime = "2.4.0"
 humantime-serde = "1.1.1"
 rand = "0.10.3"

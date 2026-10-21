@@ -1,4 +1,4 @@
-// Package gabriel provides Go bindings for Gabriel, through its C ABI (rust/include/gabriel/gabriel.h).
+// Package uriel provides Go bindings for Uriel, through its C ABI (rust/include/uriel/uriel.h).
 //
 // A producer publishes inputs on a flow. A client takes the producer's inputs and offers them to the
 // flow's engines, which a server serves. Each engine processes one input at a time and reports one
@@ -16,30 +16,30 @@
 //
 // # Building
 //
-// The package links libgabriel, the Rust library, statically, and finds it with pkg-config.
+// The package links liburiel, the Rust library, statically, and finds it with pkg-config.
 // Install the library from the same release as the package before building it. cargo-c
-// (cargo install cargo-c) installs it from a Gabriel checkout, here into ~/.local:
+// (cargo install cargo-c) installs it from a Uriel checkout, here into ~/.local:
 //
-//	cargo cinstall --release -p gabriel --library-type staticlib --prefix ~/.local --libdir lib
+//	cargo cinstall --release -p uriel --library-type staticlib --prefix ~/.local --libdir lib
 //	export PKG_CONFIG_PATH=~/.local/lib/pkgconfig
 //
-// Install only the static library: the program then needs nothing of Gabriel's where it runs.
-package gabriel
+// Install only the static library: the program then needs nothing of Uriel's where it runs.
+package uriel
 
 /*
-#cgo pkg-config: gabriel
+#cgo pkg-config: uriel
 #include <stdlib.h>
 #include <time.h>
-#include <gabriel/gabriel.h>
+#include <uriel/uriel.h>
 
 // The ABI version of the header this package was written for. Installing a library of another
 // version stops the build here, rather than failing when the package runs.
-#define GABRIEL_GO_ABI_VERSION 2
-#if GABRIEL_ABI_VERSION != GABRIEL_GO_ABI_VERSION
-#error "the installed libgabriel has a different ABI version than this package; install the release that matches it"
+#define URIEL_GO_ABI_VERSION 2
+#if URIEL_ABI_VERSION != URIEL_GO_ABI_VERSION
+#error "the installed liburiel has a different ABI version than this package; install the release that matches it"
 #endif
 
-static uint64_t gabriel_go_now_ns(void) {
+static uint64_t uriel_go_now_ns(void) {
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return (uint64_t)ts.tv_sec * 1000000000u + (uint64_t)ts.tv_nsec;
@@ -64,7 +64,7 @@ var (
 	ErrSizeExceeded = errors.New("size exceeded")
 	// ErrAgain means nothing is available yet: no input or event, or a wait timed out.
 	ErrAgain = errors.New("nothing available, try again")
-	// ErrInternal means Gabriel failed internally, e.g. in its shared memory transport.
+	// ErrInternal means Uriel failed internally, e.g. in its shared memory transport.
 	ErrInternal = errors.New("internal error")
 	// ErrWrongThread means a producer, engine or subscription was used from a goroutine other than
 	// the one that created it.
@@ -76,44 +76,44 @@ var (
 // The build checks the installed header's ABI version, but the installed library could still be
 // from another build than the header. Its ABI version says so before any call goes wrong.
 func init() {
-	if version := C.gabriel_abi_version(); version != C.GABRIEL_ABI_VERSION {
-		panic(fmt.Sprintf("gabriel: the library implements ABI version %d, but the header is version %d; "+
-			"reinstall libgabriel", version, C.GABRIEL_ABI_VERSION))
+	if version := C.uriel_abi_version(); version != C.URIEL_ABI_VERSION {
+		panic(fmt.Sprintf("uriel: the library implements ABI version %d, but the header is version %d; "+
+			"reinstall liburiel", version, C.URIEL_ABI_VERSION))
 	}
 }
 
-// Error is a failed call into Gabriel. It wraps one of the errors above.
+// Error is a failed call into Uriel. It wraps one of the errors above.
 type Error struct {
 	kind    error
 	message string
 }
 
-func (e *Error) Error() string { return "gabriel: " + e.message }
+func (e *Error) Error() string { return "uriel: " + e.message }
 
 func (e *Error) Unwrap() error { return e.kind }
 
 // call runs f, which calls into the C ABI, and returns its failure as an error. The calling
 // goroutine stays on its thread until the message of the failure is read, since the message is
 // kept per thread.
-func call(f func() C.gabriel_status_t) error {
+func call(f func() C.uriel_status_t) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	kind := statusError(f())
 	if kind == nil {
 		return nil
 	}
-	return &Error{kind: kind, message: C.GoString(C.gabriel_last_error())}
+	return &Error{kind: kind, message: C.GoString(C.uriel_last_error())}
 }
 
-func statusError(status C.gabriel_status_t) error {
+func statusError(status C.uriel_status_t) error {
 	switch status {
-	case C.GABRIEL_STATUS_T_OK:
+	case C.URIEL_STATUS_T_OK:
 		return nil
-	case C.GABRIEL_STATUS_T_ERR_INVALID:
+	case C.URIEL_STATUS_T_ERR_INVALID:
 		return ErrInvalid
-	case C.GABRIEL_STATUS_T_ERR_SIZE_EXCEEDED:
+	case C.URIEL_STATUS_T_ERR_SIZE_EXCEEDED:
 		return ErrSizeExceeded
-	case C.GABRIEL_STATUS_T_ERR_AGAIN:
+	case C.URIEL_STATUS_T_ERR_AGAIN:
 		return ErrAgain
 	default:
 		return ErrInternal
@@ -125,8 +125,8 @@ func failure(kind error) error {
 	return &Error{kind: kind, message: kind.Error()}
 }
 
-// InitLog prints Gabriel's log to standard error. filter picks what is printed, in the syntax of
-// RUST_LOG, e.g. "info" or "gabriel=debug". If it is empty, RUST_LOG picks, or warnings and errors
+// InitLog prints Uriel's log to standard error. filter picks what is printed, in the syntax of
+// RUST_LOG, e.g. "info" or "uriel=debug". If it is empty, RUST_LOG picks, or warnings and errors
 // are printed if that is unset. Call it once, before anything else; without it, nothing is logged.
 func InitLog(filter string) error {
 	var cFilter *C.char
@@ -134,17 +134,17 @@ func InitLog(filter string) error {
 		cFilter = C.CString(filter)
 		defer C.free(unsafe.Pointer(cFilter))
 	}
-	return call(func() C.gabriel_status_t { return C.gabriel_log_init(cFilter) })
+	return call(func() C.uriel_status_t { return C.uriel_log_init(cFilter) })
 }
 
-// ServeMetrics serves the metrics of Gabriel's clients and servers in this process to Prometheus, at
+// ServeMetrics serves the metrics of Uriel's clients and servers in this process to Prometheus, at
 // http://<addr>/metrics, e.g. "0.0.0.0:9464": how producers use their tokens, how full crossings
 // are, and how the connection to the remote server is doing. Call it once, before creating clients
 // and servers.
 func ServeMetrics(addr string) error {
 	cAddr := C.CString(addr)
 	defer C.free(unsafe.Pointer(cAddr))
-	return call(func() C.gabriel_status_t { return C.gabriel_metrics_serve(cAddr) })
+	return call(func() C.uriel_status_t { return C.uriel_metrics_serve(cAddr) })
 }
 
 // Timestamp is a reading of the machine's monotonic clock (CLOCK_MONOTONIC), the clock every event
@@ -153,7 +153,7 @@ type Timestamp time.Duration
 
 // Now reads the monotonic clock.
 func Now() Timestamp {
-	return Timestamp(C.gabriel_go_now_ns())
+	return Timestamp(C.uriel_go_now_ns())
 }
 
 // Sub returns the time from u to t.
@@ -176,7 +176,7 @@ type InputID struct {
 	Seq uint64
 }
 
-func inputID(id C.gabriel_input_id_t) InputID {
+func inputID(id C.uriel_input_id_t) InputID {
 	return InputID{Producer: C.GoString(id.producer), Session: uint64(id.session), Seq: uint64(id.seq)}
 }
 

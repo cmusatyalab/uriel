@@ -26,7 +26,7 @@ use tokio_util::codec::LengthDelimitedCodec;
 use crate::{Error, Result, services};
 
 /// The name the remote server's certificate is made for, and the client checks.
-pub(crate) const SERVER_NAME: &str = "gabriel";
+pub(crate) const SERVER_NAME: &str = "uriel";
 /// How long a connection may carry no packet before it counts as lost. It sets how soon a loss is
 /// noticed, against how long a link may stall.
 const IDLE_TIMEOUT: Duration = Duration::from_secs(5);

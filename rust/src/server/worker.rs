@@ -69,7 +69,7 @@ pub(super) fn spawn(name: &str, remote: Option<(SocketAddr, Identity)>) -> Resul
     let (command_tx, command_rx) = mpsc::channel();
     let name = name.to_string();
     let thread = thread::Builder::new()
-        .name(format!("gabriel-server-{name}"))
+        .name(format!("uriel-server-{name}"))
         .spawn(move || {
             // Every event the thread logs names the server.
             let _span = info_span!("server", name = %name).entered();

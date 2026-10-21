@@ -1,7 +1,7 @@
-package gabriel
+package uriel
 
 // #include <stdlib.h>
-// #include <gabriel/gabriel.h>
+// #include <uriel/uriel.h>
 import "C"
 
 import (
@@ -13,7 +13,7 @@ import (
 // used from any goroutine.
 type Server struct {
 	mu     sync.Mutex
-	handle *C.gabriel_server_t
+	handle *C.uriel_server_t
 }
 
 // ServerOption configures a server that [NewServer] creates.
@@ -39,11 +39,11 @@ func WithIdentityDir(dir string) ServerOption {
 }
 
 // set writes o to the C ABI's server options.
-func (o *serverOptions) set(options *C.gabriel_server_options_t) error {
+func (o *serverOptions) set(options *C.uriel_server_options_t) error {
 	if o.bindAddr != "" {
 		cBindAddr := C.CString(o.bindAddr)
 		defer C.free(unsafe.Pointer(cBindAddr))
-		err := call(func() C.gabriel_status_t { return C.gabriel_server_options_set_bind_addr(options, cBindAddr) })
+		err := call(func() C.uriel_status_t { return C.uriel_server_options_set_bind_addr(options, cBindAddr) })
 		if err != nil {
 			return err
 		}
@@ -53,8 +53,8 @@ func (o *serverOptions) set(options *C.gabriel_server_options_t) error {
 	}
 	cIdentityDir := C.CString(o.identityDir)
 	defer C.free(unsafe.Pointer(cIdentityDir))
-	return call(func() C.gabriel_status_t {
-		return C.gabriel_server_options_set_identity_dir(options, cIdentityDir)
+	return call(func() C.uriel_status_t {
+		return C.uriel_server_options_set_identity_dir(options, cIdentityDir)
 	})
 }
 
@@ -66,17 +66,17 @@ func NewServer(name string, opts ...ServerOption) (*Server, error) {
 	}
 	cName := C.CString(name)
 	defer C.free(unsafe.Pointer(cName))
-	var options *C.gabriel_server_options_t
-	if err := call(func() C.gabriel_status_t { return C.gabriel_server_options_create(&options) }); err != nil {
+	var options *C.uriel_server_options_t
+	if err := call(func() C.uriel_status_t { return C.uriel_server_options_create(&options) }); err != nil {
 		return nil, err
 	}
-	defer C.gabriel_server_options_destroy(options)
+	defer C.uriel_server_options_destroy(options)
 	if err := o.set(options); err != nil {
 		return nil, err
 	}
 	s := &Server{}
-	err := call(func() C.gabriel_status_t {
-		return C.gabriel_server_create(cName, options, &s.handle)
+	err := call(func() C.uriel_status_t {
+		return C.uriel_server_create(cName, options, &s.handle)
 	})
 	if err != nil {
 		return nil, err
@@ -85,7 +85,7 @@ func NewServer(name string, opts ...ServerOption) (*Server, error) {
 }
 
 // locked calls f with the server's lock held.
-func (s *Server) locked(f func() C.gabriel_status_t) error {
+func (s *Server) locked(f func() C.uriel_status_t) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.handle == nil {
@@ -98,21 +98,21 @@ func (s *Server) locked(f func() C.gabriel_status_t) error {
 func (s *Server) AddEngine(name string) error {
 	cName := C.CString(name)
 	defer C.free(unsafe.Pointer(cName))
-	return s.locked(func() C.gabriel_status_t { return C.gabriel_server_add_engine(s.handle, cName) })
+	return s.locked(func() C.uriel_status_t { return C.uriel_server_add_engine(s.handle, cName) })
 }
 
 // RemoveEngine stops serving the engine name.
 func (s *Server) RemoveEngine(name string) error {
 	cName := C.CString(name)
 	defer C.free(unsafe.Pointer(cName))
-	return s.locked(func() C.gabriel_status_t { return C.gabriel_server_remove_engine(s.handle, cName) })
+	return s.locked(func() C.uriel_status_t { return C.uriel_server_remove_engine(s.handle, cName) })
 }
 
 // RemotePort returns the port remote clients reach the server on. It fails for a server created
 // without a bind address.
 func (s *Server) RemotePort() (uint16, error) {
 	var port C.uint16_t
-	err := s.locked(func() C.gabriel_status_t { return C.gabriel_server_remote_port(s.handle, &port) })
+	err := s.locked(func() C.uriel_status_t { return C.uriel_server_remote_port(s.handle, &port) })
 	return uint16(port), err
 }
 
@@ -121,8 +121,8 @@ func (s *Server) RemotePort() (uint16, error) {
 func (s *Server) Certificate() ([]byte, error) {
 	var certificate *C.uint8_t
 	var n C.size_t
-	err := s.locked(func() C.gabriel_status_t {
-		return C.gabriel_server_certificate(s.handle, &certificate, &n)
+	err := s.locked(func() C.uriel_status_t {
+		return C.uriel_server_certificate(s.handle, &certificate, &n)
 	})
 	if err != nil {
 		return nil, err
@@ -137,7 +137,7 @@ func (s *Server) Close() error {
 	if s.handle == nil {
 		return failure(ErrClosed)
 	}
-	err := call(func() C.gabriel_status_t { return C.gabriel_server_destroy(s.handle) })
+	err := call(func() C.uriel_status_t { return C.uriel_server_destroy(s.handle) })
 	s.handle = nil
 	return err
 }

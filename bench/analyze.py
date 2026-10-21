@@ -20,7 +20,7 @@ Per input an engine got:
   age          sent - published: how old the input was when the engine got
                it.
   excess       the age minus the time the input spent in engines before this
-               one on its path. All the waiting Gabriel added.
+               one on its path. All the waiting Uriel added.
   before       offered - published at the first engine: waiting for a token
                and on the crossing, and the trip to the server.
   uplink       offered - the previous engine's result, when the two engines

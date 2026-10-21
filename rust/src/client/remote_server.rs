@@ -27,7 +27,7 @@ use crate::{
     client::server_link::{Received, ServerEvent, ServerLink},
     clock::Timestamp,
     ipc::types::{ClientEventHeader, CrossingHeader, CrossingKind, PayloadType},
-    metrics as gabriel_metrics, naming,
+    metrics as uriel_metrics, naming,
     net::{self, Waker},
     routing::{
         ids::{InputId, OfferId},
@@ -104,7 +104,7 @@ impl RemoteServer {
         let (updates_tx, updates_rx) = mpsc::channel();
         let span = info_span!("remote server", %addr);
         let ((), thread) = net::spawn(
-            format!("gabriel-client-{client}-network"),
+            format!("uriel-client-{client}-network"),
             ready_service,
             move |waker| {
                 let mut endpoint =
@@ -428,13 +428,13 @@ impl ConnectionMetrics {
     fn new(server: SocketAddr) -> Self {
         let labels = [("server", server.to_string())];
         let metrics = Self {
-            connected: gauge!(gabriel_metrics::REMOTE_CONNECTED, &labels),
-            rtt: gauge!(gabriel_metrics::REMOTE_RTT, &labels),
-            congestion_window: gauge!(gabriel_metrics::REMOTE_CONGESTION_WINDOW, &labels),
-            lost_packets: counter!(gabriel_metrics::REMOTE_LOST_PACKETS, &labels),
-            congestion_events: counter!(gabriel_metrics::REMOTE_CONGESTION_EVENTS, &labels),
-            sent_bytes: counter!(gabriel_metrics::REMOTE_SENT_BYTES, &labels),
-            received_bytes: counter!(gabriel_metrics::REMOTE_RECEIVED_BYTES, &labels),
+            connected: gauge!(uriel_metrics::REMOTE_CONNECTED, &labels),
+            rtt: gauge!(uriel_metrics::REMOTE_RTT, &labels),
+            congestion_window: gauge!(uriel_metrics::REMOTE_CONGESTION_WINDOW, &labels),
+            lost_packets: counter!(uriel_metrics::REMOTE_LOST_PACKETS, &labels),
+            congestion_events: counter!(uriel_metrics::REMOTE_CONGESTION_EVENTS, &labels),
+            sent_bytes: counter!(uriel_metrics::REMOTE_SENT_BYTES, &labels),
+            received_bytes: counter!(uriel_metrics::REMOTE_RECEIVED_BYTES, &labels),
             last: ConnectionStats::default(),
         };
         metrics.connected.set(1.0);
@@ -842,15 +842,15 @@ mod tests {
             .map(|(key, _, _, value)| (key.key().name().to_owned(), value))
             .collect();
         assert_eq!(
-            values[gabriel_metrics::REMOTE_LOST_PACKETS],
+            values[uriel_metrics::REMOTE_LOST_PACKETS],
             DebugValue::Counter(5)
         );
         assert_eq!(
-            values[gabriel_metrics::REMOTE_SENT_BYTES],
+            values[uriel_metrics::REMOTE_SENT_BYTES],
             DebugValue::Counter(150)
         );
         assert_eq!(
-            values[gabriel_metrics::REMOTE_CONNECTED],
+            values[uriel_metrics::REMOTE_CONNECTED],
             DebugValue::Gauge(1.0.into())
         );
     }

@@ -1,4 +1,4 @@
-//! iceoryx2 services that connect Gabriel's local components. Every side of a service opens it
+//! iceoryx2 services that connect Uriel's local components. Every side of a service opens it
 //! through here, so they always agree on its types.
 
 use std::{thread, time::Duration};
@@ -403,7 +403,7 @@ pub(crate) fn wait_for_any<'a>(
     listeners: impl IntoIterator<Item = &'a Listener<ipc::Service>>,
     timeout: Duration,
 ) -> Result<()> {
-    // Gabriel is a library: leave SIGINT/SIGTERM handling to the host application.
+    // Uriel is a library: leave SIGINT/SIGTERM handling to the host application.
     let waitset = WaitSetBuilder::new()
         .signal_handling_mode(SignalHandlingMode::Disabled)
         .create::<ipc::Service>()

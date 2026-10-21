@@ -2,7 +2,7 @@
 # detector on the remote server, over a link with a 40 ms round trip. The network is emulated on
 # loopback, so this run needs its own network namespace:
 #
-#   unshare --user --map-root-user --net target/release/gabriel-bench bench/runs/remote.toml
+#   unshare --user --map-root-user --net target/release/uriel-bench bench/runs/remote.toml
 name = "remote"
 duration = "20s"
 drain = "2s"

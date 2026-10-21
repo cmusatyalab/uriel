@@ -1,6 +1,6 @@
 # Object detection with YOLO26
 
-An app sends video frames through Gabriel to a YOLO26 engine, and prints what it finds in each.
+An app sends video frames through Uriel to a YOLO26 engine, and prints what it finds in each.
 Everything runs on this machine. Frames go through shared memory as raw images, with no
 encoding on the way.
 
@@ -14,7 +14,7 @@ encoding on the way.
 ## Running it
 
 ```sh
-cargo build --release -p gabriel              # from the repository root
+cargo build --release -p uriel              # from the repository root
 pip install -r requirements.txt               # from this directory
 ```
 

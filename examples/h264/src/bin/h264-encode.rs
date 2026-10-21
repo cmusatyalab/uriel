@@ -1,7 +1,7 @@
-//! A Gabriel engine that encodes raw RGB frames (SteelEagle `RawFrame`s) with H.264, and emits
+//! A Uriel engine that encodes raw RGB frames (SteelEagle `RawFrame`s) with H.264, and emits
 //! each as an `EncodedVideoFrame`, e.g. for `h264-decode` on a remote server.
 //!
-//! Frames reach the decoder only if Gabriel carries them there: the crossing to the remote server
+//! Frames reach the decoder only if Uriel carries them there: the crossing to the remote server
 //! may skip a frame for a newer one, or time it out. Each P-frame needs the frames before it, so
 //! the encoder subscribes to the decoder's events, and makes its next frame a keyframe once a
 //! frame it encoded since its last keyframe does not reach the decoder.
@@ -10,14 +10,14 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use gabriel::{Engine, EventKind, InputId, subscription::Event};
-use gabriel_h264::{
-    DecodeResult, EncodedVideoFrame, Pipeline, RGB_CHANNELS, RawFrameView, WAIT_TIMEOUT,
-    stop_on_signal, stopped, type_name,
-};
 use gstreamer::{self as gst};
 use gstreamer_video::{VideoFormat, VideoInfo};
 use protobuf::Message;
+use uriel::{Engine, EventKind, InputId, subscription::Event};
+use uriel_h264::{
+    DecodeResult, EncodedVideoFrame, Pipeline, RGB_CHANNELS, RawFrameView, WAIT_TIMEOUT,
+    stop_on_signal, stopped, type_name,
+};
 
 /// Software x264, tuned so that each frame comes out before the next goes in. videoconvert gives
 /// the encoder the pixel format it takes. On a Tachyon, the hardware encoder:
@@ -30,7 +30,7 @@ const DEFAULT_MAX_OUTPUT_SIZE: usize = 2 * 1024 * 1024;
 #[derive(Parser)]
 #[command(
     version,
-    about = "Encodes raw RGB frames with H.264, as a Gabriel engine"
+    about = "Encodes raw RGB frames with H.264, as a Uriel engine"
 )]
 struct Args {
     /// The engine's name.
@@ -229,13 +229,13 @@ fn main() -> Result<()> {
     let mut frame_number: u64 = 0;
     while !stopped(&stop) {
         match engine.wait(WAIT_TIMEOUT) {
-            Ok(()) | Err(gabriel::Error::Again) => {}
+            Ok(()) | Err(uriel::Error::Again) => {}
             Err(e) => return Err(e.into()),
         }
         loop {
             match engine.poll_event() {
                 Ok(event) => keyframes.decoder_event(&event),
-                Err(gabriel::Error::Again) => break,
+                Err(uriel::Error::Again) => break,
                 Err(e) => return Err(e.into()),
             }
         }
@@ -245,7 +245,7 @@ fn main() -> Result<()> {
                 input.payload_type().to_owned(),
                 RawFrameView::parse_from_bytes(input.data),
             ),
-            Err(gabriel::Error::Again) => continue,
+            Err(uriel::Error::Again) => continue,
             Err(e) => return Err(e.into()),
         };
         let started = Instant::now();

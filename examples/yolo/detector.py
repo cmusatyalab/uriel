@@ -1,4 +1,4 @@
-"""Runs YOLO26 as a Gabriel engine: finds the objects in each frame it gets.
+"""Runs YOLO26 as a Uriel engine: finds the objects in each frame it gets.
 
     python detector.py [--model yolo26n.pt]
 
@@ -11,8 +11,8 @@ import contextlib
 import json
 import signal
 
-import gabriel
 import numpy as np
+import uriel
 from common import CHANNELS, ENGINE, HEIGHT, WIDTH
 from ultralytics import YOLO
 
@@ -32,7 +32,7 @@ model(np.zeros((HEIGHT, WIDTH, CHANNELS), np.uint8), verbose=False)
 signal.signal(signal.SIGTERM, signal.default_int_handler)
 
 with (
-    gabriel.Engine(
+    uriel.Engine(
         ENGINE, result_type=RESULT_TYPE, max_output_size=MAX_RESULT_SIZE
     ) as engine,
     contextlib.suppress(KeyboardInterrupt),

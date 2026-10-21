@@ -1,4 +1,4 @@
-"""Compares the new Gabriel with the old one on this machine.
+"""Compares Uriel with the old Gabriel on this machine.
 
     python compare.py [--systems new old-ipc] [--resolutions 720p 4k]
 
@@ -25,7 +25,7 @@ HERE = Path(__file__).resolve().parent
 RESULTS = HERE.parents[1] / "bench-results"
 # Each system: its script, and the transport it takes, if any.
 SYSTEMS = {
-    "new": ("new_gabriel.py", None),
+    "new": ("new_uriel.py", None),
     "old-websocket": ("old_gabriel.py", "websocket"),
     "old-websocket-uncompressed": (
         "old_gabriel.py",

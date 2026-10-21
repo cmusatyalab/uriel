@@ -1,7 +1,7 @@
-package gabriel
+package uriel
 
 // #include <stdlib.h>
-// #include <gabriel/gabriel.h>
+// #include <uriel/uriel.h>
 import "C"
 
 import (
@@ -35,13 +35,13 @@ func WithCrossingCapacity(capacity int) ClientOption {
 }
 
 // set writes o to the C ABI's client options.
-func (o *clientOptions) set(options *C.gabriel_client_options_t) error {
+func (o *clientOptions) set(options *C.uriel_client_options_t) error {
 	if o.remoteAddr != "" {
 		cAddr := C.CString(o.remoteAddr)
 		defer C.free(unsafe.Pointer(cAddr))
 		certificate, certificateLen := bytesArg(o.certificate)
-		err := call(func() C.gabriel_status_t {
-			return C.gabriel_client_options_set_remote_server(options, cAddr, certificate, certificateLen)
+		err := call(func() C.uriel_status_t {
+			return C.uriel_client_options_set_remote_server(options, cAddr, certificate, certificateLen)
 		})
 		if err != nil {
 			return err
@@ -53,8 +53,8 @@ func (o *clientOptions) set(options *C.gabriel_client_options_t) error {
 	if *o.crossingCapacity < 0 {
 		return &Error{kind: ErrInvalid, message: "negative crossing capacity"}
 	}
-	return call(func() C.gabriel_status_t {
-		return C.gabriel_client_options_set_remote_crossing_capacity(options, C.size_t(*o.crossingCapacity))
+	return call(func() C.uriel_status_t {
+		return C.uriel_client_options_set_remote_crossing_capacity(options, C.size_t(*o.crossingCapacity))
 	})
 }
 
@@ -62,7 +62,7 @@ func (o *clientOptions) set(options *C.gabriel_client_options_t) error {
 // goroutine.
 type Client struct {
 	mu     sync.Mutex
-	handle *C.gabriel_client_t
+	handle *C.uriel_client_t
 }
 
 // NewClient creates the client name, of the local server localServer. Without options, it has no
@@ -76,17 +76,17 @@ func NewClient(name, localServer string, opts ...ClientOption) (*Client, error) 
 	defer C.free(unsafe.Pointer(cName))
 	cLocalServer := C.CString(localServer)
 	defer C.free(unsafe.Pointer(cLocalServer))
-	var options *C.gabriel_client_options_t
-	if err := call(func() C.gabriel_status_t { return C.gabriel_client_options_create(&options) }); err != nil {
+	var options *C.uriel_client_options_t
+	if err := call(func() C.uriel_status_t { return C.uriel_client_options_create(&options) }); err != nil {
 		return nil, err
 	}
-	defer C.gabriel_client_options_destroy(options)
+	defer C.uriel_client_options_destroy(options)
 	if err := o.set(options); err != nil {
 		return nil, err
 	}
 	c := &Client{}
-	err := call(func() C.gabriel_status_t {
-		return C.gabriel_client_create(cName, cLocalServer, options, &c.handle)
+	err := call(func() C.uriel_status_t {
+		return C.uriel_client_create(cName, cLocalServer, options, &c.handle)
 	})
 	if err != nil {
 		return nil, err
@@ -95,7 +95,7 @@ func NewClient(name, localServer string, opts ...ClientOption) (*Client, error) 
 }
 
 // withName calls f on the client with name as a C string.
-func (c *Client) withName(name string, f func(*C.char) C.gabriel_status_t) error {
+func (c *Client) withName(name string, f func(*C.char) C.uriel_status_t) error {
 	cName := C.CString(name)
 	defer C.free(unsafe.Pointer(cName))
 	c.mu.Lock()
@@ -103,20 +103,20 @@ func (c *Client) withName(name string, f func(*C.char) C.gabriel_status_t) error
 	if c.handle == nil {
 		return failure(ErrClosed)
 	}
-	return call(func() C.gabriel_status_t { return f(cName) })
+	return call(func() C.uriel_status_t { return f(cName) })
 }
 
 // AddProducer takes the inputs of the producer name.
 func (c *Client) AddProducer(name string) error {
-	return c.withName(name, func(n *C.char) C.gabriel_status_t {
-		return C.gabriel_client_add_producer(c.handle, n)
+	return c.withName(name, func(n *C.char) C.uriel_status_t {
+		return C.uriel_client_add_producer(c.handle, n)
 	})
 }
 
 // RemoveProducer stops taking the inputs of the producer name. It fails while a flow uses it.
 func (c *Client) RemoveProducer(name string) error {
-	return c.withName(name, func(n *C.char) C.gabriel_status_t {
-		return C.gabriel_client_remove_producer(c.handle, n)
+	return c.withName(name, func(n *C.char) C.uriel_status_t {
+		return C.uriel_client_remove_producer(c.handle, n)
 	})
 }
 
@@ -141,15 +141,15 @@ func (c *Client) RemoveProducer(name string) error {
 func (c *Client) AddFlow(name, spec string) error {
 	cSpec := C.CString(spec)
 	defer C.free(unsafe.Pointer(cSpec))
-	return c.withName(name, func(n *C.char) C.gabriel_status_t {
-		return C.gabriel_client_add_flow(c.handle, n, cSpec)
+	return c.withName(name, func(n *C.char) C.uriel_status_t {
+		return C.uriel_client_add_flow(c.handle, n, cSpec)
 	})
 }
 
 // RemoveFlow removes the flow name.
 func (c *Client) RemoveFlow(name string) error {
-	return c.withName(name, func(n *C.char) C.gabriel_status_t {
-		return C.gabriel_client_remove_flow(c.handle, n)
+	return c.withName(name, func(n *C.char) C.uriel_status_t {
+		return C.uriel_client_remove_flow(c.handle, n)
 	})
 }
 
@@ -160,7 +160,7 @@ func (c *Client) Close() error {
 	if c.handle == nil {
 		return failure(ErrClosed)
 	}
-	err := call(func() C.gabriel_status_t { return C.gabriel_client_destroy(c.handle) })
+	err := call(func() C.uriel_status_t { return C.uriel_client_destroy(c.handle) })
 	c.handle = nil
 	return err
 }

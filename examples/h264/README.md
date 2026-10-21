@@ -1,6 +1,6 @@
 # H.264 engines
 
-Two Gabriel engines that send video frames over a slow link as H.264 instead of raw pixels:
+Two Uriel engines that send video frames over a slow link as H.264 instead of raw pixels:
 
 | Engine        | Takes                                   | Emits                                    |
 | ------------- | --------------------------------------- | ---------------------------------------- |
@@ -16,7 +16,7 @@ camera → yolo → h264-encode ══ crossing ══► h264-decode → detect
 
 ## Keyframe on gap
 
-Gabriel keeps results fresh by skipping stale frames, and a crossing may time a frame out. But
+Uriel keeps results fresh by skipping stale frames, and a crossing may time a frame out. But
 an H.264 P-frame only decodes after every frame before it, back to a keyframe. So:
 
 - The encoder numbers the frames it encodes. After a gap in the numbers, the decoder drops
@@ -39,20 +39,20 @@ frame with the payload type the encoder got. So the engines work with either Ste
 On the machine that runs them, with GStreamer's development files installed:
 
 ```sh
-cargo build --release -p gabriel-h264
+cargo build --release -p uriel-h264
 ```
 
 For a Particle Tachyon (aarch64, Ubuntu 20.04), cross-compile from the repository root:
 
 ```sh
-docker build -t gabriel-h264-aarch64 -f examples/h264/Dockerfile.aarch64 examples/h264
+docker build -t uriel-h264-aarch64 -f examples/h264/Dockerfile.aarch64 examples/h264
 docker run --rm -u $(id -u):$(id -g) -v $PWD:/src -w /src -e CARGO_TARGET_DIR=/src/target/aarch64 \
-    gabriel-h264-aarch64 cargo build --release --target aarch64-unknown-linux-gnu -p gabriel-h264
+    uriel-h264-aarch64 cargo build --release --target aarch64-unknown-linux-gnu -p uriel-h264
 ```
 
 ## Running
 
-Each engine waits for a Gabriel server to serve it. The encoder and decoder elements are
+Each engine waits for a Uriel server to serve it. The encoder and decoder elements are
 GStreamer elements, in `gst-launch-1.0` syntax:
 
 ```sh

@@ -3,7 +3,7 @@
 use std::env;
 use std::path::PathBuf;
 
-const HEADER_PATH: &str = "include/gabriel/gabriel.h";
+const HEADER_PATH: &str = "include/uriel/uriel.h";
 
 fn main() {
     let crate_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("set by cargo"));

@@ -3,7 +3,7 @@
 import enum
 from dataclasses import dataclass
 
-from gabriel._ffi import ffi, lib
+from uriel._ffi import ffi, lib
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,33 +56,33 @@ class ReadInput:
 class EventKind(enum.IntEnum):
     """What happened to an input."""
 
-    ACCEPTED = lib.GABRIEL_EVENT_KIND_T_ACCEPTED
+    ACCEPTED = lib.URIEL_EVENT_KIND_T_ACCEPTED
     """A server received the input and made one offer per target engine."""
-    SENT = lib.GABRIEL_EVENT_KIND_T_SENT
+    SENT = lib.URIEL_EVENT_KIND_T_SENT
     """The offer was sent to the engine; a result may come."""
-    RESULT = lib.GABRIEL_EVENT_KIND_T_RESULT
+    RESULT = lib.URIEL_EVENT_KIND_T_RESULT
     """The engine finished the input. `Event.outcome` says what it forwarded."""
-    SKIPPED = lib.GABRIEL_EVENT_KIND_T_SKIPPED
+    SKIPPED = lib.URIEL_EVENT_KIND_T_SKIPPED
     """A newer input replaced the offer before it was sent."""
-    TIMED_OUT = lib.GABRIEL_EVENT_KIND_T_TIMED_OUT
+    TIMED_OUT = lib.URIEL_EVENT_KIND_T_TIMED_OUT
     """The engine did not answer in time, or was lost."""
-    DISCONNECTED = lib.GABRIEL_EVENT_KIND_T_DISCONNECTED
+    DISCONNECTED = lib.URIEL_EVENT_KIND_T_DISCONNECTED
     """The client lost its connection to a server of the flow. Every offer on that server ended
     with it. It names no input."""
-    DERIVED = lib.GABRIEL_EVENT_KIND_T_DERIVED
+    DERIVED = lib.URIEL_EVENT_KIND_T_DERIVED
     """A result an engine derived from subscribed events. It answers no offer."""
-    LOST = lib.GABRIEL_EVENT_KIND_T_LOST
+    LOST = lib.URIEL_EVENT_KIND_T_LOST
     """Events were lost before the next one, because the subscriber fell behind."""
 
 
 class Outcome(enum.IntEnum):
     """What an engine did with an input: what it forwarded along its outgoing edges."""
 
-    DROP = lib.GABRIEL_OUTCOME_T_DROP
+    DROP = lib.URIEL_OUTCOME_T_DROP
     """Nothing; the input ended at the engine."""
-    FORWARD = lib.GABRIEL_OUTCOME_T_FORWARD
+    FORWARD = lib.URIEL_OUTCOME_T_FORWARD
     """The input, unchanged."""
-    REPLACE = lib.GABRIEL_OUTCOME_T_REPLACE
+    REPLACE = lib.URIEL_OUTCOME_T_REPLACE
     """A new input, in place of the input."""
 
 
