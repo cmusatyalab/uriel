@@ -63,4 +63,6 @@ jobs:
         run: |
           uvx ruff check .
           uvx ruff format --check .
-          uv run --locked pytest
+          # The oldest and the newest Python that the package supports.
+          uv run --locked --python 3.11 pytest
+          uv run --locked --python 3.14 pytest

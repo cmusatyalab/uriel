@@ -5,11 +5,19 @@ description = "Python bindings for Uriel, through its C ABI"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-requires-python = ">=3.10"
+authors = [{ name = "Aditya Chanana", email = "achanana@cs.cmu.edu" }]
+maintainers = [{ name = "CMU Satyalab", email = "gabriel@cmusatyalab.org" }]
+# The Python versions that are still supported upstream.
+requires-python = ">=3.11"
 dependencies = ["cffi>=1.17"]
 classifiers = [
+    "Development Status :: 3 - Alpha",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Rust",
 ]
 
