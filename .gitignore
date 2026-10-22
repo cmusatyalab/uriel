@@ -5,6 +5,8 @@
 build/
 build-*/
 target/
+# What .github/scripts/build-release.sh builds.
+/dist/
 *~
 *.swp
 bench-results/

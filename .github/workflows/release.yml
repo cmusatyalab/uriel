@@ -1,0 +1,98 @@
+name: Release
+
+# Pushing a tag v<version>, e.g. v0.1.0, releases that version: the Python package to PyPI,
+# liburiel for each architecture to a GitHub release, and the Go module, by tagging the same
+# commit go/v<version>. A release candidate, e.g. v0.1.0-rc1, goes to TestPyPI instead, and its
+# GitHub release is marked as a pre-release.
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  RUST_VERSION: "1.98.1"
+  CARGO_C_VERSION: "0.10.26"
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Check that the tag names the crate's and the package's version
+        id: check
+        run: |
+          version=$(uv run --no-project --with packaging python .github/scripts/check_version.py "$GITHUB_REF_NAME")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build liburiel and the Python package
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+          # The sdist is the same on every architecture.
+          SDIST: ${{ matrix.arch == 'x86_64' }}
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src \
+              -e VERSION -e ARCH -e RUST_VERSION -e CARGO_C_VERSION -e SDIST \
+              quay.io/pypa/manylinux_2_28_$ARCH .github/scripts/build-release.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.arch }}
+          path: dist/
+
+  pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    # PyPI trusts this workflow, in this environment, to publish uriel (trusted publishing).
+    environment: ${{ contains(github.ref_name, '-') && 'testpypi' || 'pypi' }}
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/python/
+          repository-url: ${{ contains(github.ref_name, '-') && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}
+
+  github:
+    needs: pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist/
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/lib/*
+            dist/python/*
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+      - name: Tag the Go module
+        # Go finds the module in go/ by tags go/v<version>. A tag pushed with this workflow's
+        # token starts no workflow, and this one does not match v* anyway.
+        run: |
+          git tag "go/$GITHUB_REF_NAME" "$GITHUB_SHA"
+          git push origin "go/$GITHUB_REF_NAME"

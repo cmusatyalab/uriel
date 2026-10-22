@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install libclang and GStreamer
+        # libclang generates iceoryx2's bindings, and examples/h264 links GStreamer.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libclang-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-c
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go/go.mod
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Check that the license copies match
+        # The Go module and the Python package each ship their own copy.
+        run: cmp LICENSE go/LICENSE && cmp LICENSE python/LICENSE
+
+      - name: Rust
+        run: |
+          cargo fmt --all --check
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo test --workspace --locked
+
+      - name: Check that the C header is up to date
+        # The build regenerates it from rust/src/ffi.rs.
+        run: git diff --exit-code rust/include
+
+      - name: Install liburiel
+        run: |
+          cargo cinstall --release --locked -p uriel --library-type staticlib --prefix "$HOME/.local" --libdir lib
+          echo "PKG_CONFIG_PATH=$HOME/.local/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      - name: Go
+        run: |
+          test -z "$(gofmt -l go examples/go)"
+          (cd go && go vet ./... && go test ./...)
+          go vet ./examples/go/...
+
+      - name: Python
+        working-directory: python
+        run: |
+          uvx ruff check .
+          uvx ruff format --check .
+          uv run --locked pytest

@@ -4,8 +4,17 @@ version = "0.1.0"
 description = "Python bindings for Uriel, through its C ABI"
 readme = "README.md"
 license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = ["cffi>=1.17"]
+classifiers = [
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+]
+
+[project.urls]
+Repository = "https://github.com/cmusatyalab/uriel"
 
 [dependency-groups]
 dev = ["pytest>=8", "numpy>=2"]
