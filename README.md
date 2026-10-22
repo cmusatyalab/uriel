@@ -1,224 +1,138 @@
 # Uriel
 
-Uriel is the underlying communication mechanism for Uriel. It is a token-based flow control producer-consumer system. A producer fans frames out to any number of consumers, and each consumer fans frames in from any number of producers and replies to them. Whenever a consumer asks for a frame, it gets the newest one available from each producer.
+Uriel moves data, such as video frames, from the apps that produce it to the engines that process it, and the engines' results back to the apps. Each app's inputs go through a flow of engines: on the same machine, through shared memory, or to a server on the network. Flow control keeps the newest input moving, so a slow engine never builds up a queue.
 
-Every connection runs in one of two modes, chosen by its address prefix. A single producer or consumer can mix both.
+Uriel is written in Rust and has bindings for Python, Go and C. It runs on Linux.
 
-- **Buffered** (`tcp://` or `unix://`) sends the data over the socket. Frames are pushed to a consumer as long as it has a token, so several can be in flight at once. This hides network latency: the producer never waits for a reply before sending the next frame.
-- **Unbuffered** (`shm://`) uses a Unix Domain Socket for signaling and shared memory for the data. Each frame is written once into the producer's shared memory pool, and a consumer is handed the newest frame whenever it has a token. Nothing queues up, which is ideal locally where a round trip is nearly free.
+## Install
 
-## Building and testing
+### Python
 
 ```sh
-cargo build && cargo test                     # Rust library (rust/) + C header at rust/include/uriel/uriel.h
-cmake -S . -B build && cmake --build build   # C library (uriel) + tests
-(cd build && ctest --output-on-failure)       # or ./build/c/test_uriel [test ...]
-(cd go && go test ./...)                      # Go bindings (needs liburiel installed; see below)
-pip install . && pytest python/tests          # Python bindings
+pip install uriel
 ```
 
-The Go bindings link liburiel statically and find it with pkg-config, so install it first. [cargo-c](https://github.com/lu-zero/cargo-c) (`cargo install cargo-c`) installs the library, its header and `uriel.pc`:
+This needs Python 3.11 or newer, and Linux on x86_64 or aarch64 with glibc 2.28 or newer.
+
+### Go and C
+
+Go and C programs link liburiel, a static library. Each [release](https://github.com/cmusatyalab/uriel/releases) has it for x86_64 and aarch64, as `liburiel-<version>-linux-<arch>.tar.gz`. Use the library of the same version as the Go module.
+
+**1. Download and unpack it.** Pick the architecture the program will run on:
+
+```sh
+curl -LO https://github.com/cmusatyalab/uriel/releases/download/v0.1.0/liburiel-0.1.0-linux-x86_64.tar.gz
+tar -xzf liburiel-0.1.0-linux-x86_64.tar.gz
+```
+
+That gives:
+
+```
+liburiel-0.1.0-linux-x86_64/
+├── include/uriel/uriel.h
+├── lib/liburiel.a
+├── lib/pkgconfig/uriel.pc
+└── LICENSE
+```
+
+**2. Point pkg-config at it.** Either leave the directory where it is, anywhere you like, and set:
+
+```sh
+export PKG_CONFIG_PATH=$PWD/liburiel-0.1.0-linux-x86_64/lib/pkgconfig
+```
+
+or install it for the whole system, where pkg-config finds it by itself:
+
+```sh
+sudo tar -xzf liburiel-0.1.0-linux-x86_64.tar.gz -C /usr/local --strip-components=1
+```
+
+`pkg-config --libs uriel` should now print `-L…/lib -luriel …`.
+
+**3. Build your program.**
+
+In Go:
+
+```sh
+go get github.com/cmusatyalab/uriel/go@v0.1.0
+```
+
+```go
+import "github.com/cmusatyalab/uriel/go" // package uriel
+```
+
+`go build` finds liburiel through pkg-config and links it into the binary. If the installed library has a different ABI version than the Go module, the build stops and says so.
+
+In C:
+
+```c
+#include <uriel/uriel.h>
+```
+
+```sh
+cc app.c $(pkg-config --cflags --libs uriel) -o app
+```
+
+CMake (`pkg_check_modules(URIEL REQUIRED uriel)`) and Meson (`dependency('uriel')`) find it through pkg-config too.
+
+**Running the program.** It needs nothing of Uriel's: the program contains all of it, and only uses the system libraries that every Linux has.
+
+**Cross-compiling,** e.g. for an arm64 device: use the aarch64 tarball and the cross compiler.
+
+```sh
+export PKG_CONFIG_PATH=$PWD/liburiel-0.1.0-linux-aarch64/lib/pkgconfig
+CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build ./...
+```
+
+### From source
+
+Building liburiel needs Rust, libclang, pkg-config and [cargo-c](https://github.com/lu-zero/cargo-c) (`cargo install cargo-c`). From a checkout:
 
 ```sh
 cargo cinstall --release -p uriel --library-type staticlib --prefix ~/.local --libdir lib
 export PKG_CONFIG_PATH=~/.local/lib/pkgconfig
 ```
 
-Install it again whenever the Rust library changes. A Go program built against it needs nothing of Uriel's where it runs. The Go module is `github.com/cmusatyalab/uriel/go`, tagged `go/vX.Y.Z`; build it against the liburiel of the same release. A library with another ABI version stops the build.
+Install it only as a static library, as above, so programs linked with it need nothing of Uriel's where they run.
 
-Set `URIEL_LOG=1` when running `test_uriel` to print Uriel's internal log. The C library is Linux-only (it uses `memfd_create` and `eventfd`).
+## Examples
 
-## Scope
+- `examples/go/hello` and `examples/python/hello.py`: an app sends text to an engine that upper-cases it.
+- `examples/go/pipeline`: a camera, a motion filter and a detector in one process.
+- `examples/yolo`: object detection with YOLO, in Python.
+- `examples/h264`: engines that encode frames with H.264, and decode them.
 
-The C library (and its C ABI) is Uriel only. It contains no references to Uriel. The Uriel client and server logic is written in Go/Python on top of the Uriel ABI.
+## Developing
 
-## Code layout
+| Directory   | What's in it                                                        |
+| ----------- | ------------------------------------------------------------------- |
+| `rust/`     | The library, and its C ABI (`src/ffi.rs`, `include/uriel/uriel.h`). |
+| `go/`       | The Go bindings, the module `github.com/cmusatyalab/uriel/go`.      |
+| `python/`   | The Python bindings, the package `uriel`.                           |
+| `server/`   | `uriel-server`, which serves a machine's engines to remote clients. |
+| `examples/` | The examples above.                                                 |
+| `bench/`    | Benchmarks.                                                         |
 
-| File                 | What's in it                                                                 |
-| -------------------- | ---------------------------------------------------------------------------- |
-| `c/include/uriel/uriel.h` | The public API.                                                 |
-| `c/src/internal.h`, `c/src/common.c` | Helpers: logging, addresses, socket I/O, shared memory, the wire protocol, the handshake, messages. |
-| `c/src/producer.c`   | The producer: target table, reader and connector threads, the shared memory pool's bookkeeping. |
-| `c/src/consumer.c`   | The consumer: accept thread, the receive loop, replies.                      |
-| `c/tests/test_uriel.c` | Tests.                                                                  |
+To build and test everything, install liburiel from source as above, and GStreamer's development files for `examples/h264` (`libgstreamer1.0-dev` and `libgstreamer-plugins-base1.0-dev` on Ubuntu). Then:
 
-## Addresses
-
-| Address           | Mode       | Transport                   |
-| ----------------- | ---------- | --------------------------- |
-| `tcp://host:port` | buffered   | TCP                         |
-| `unix://path`     | buffered   | Unix socket                 |
-| `shm://path`      | unbuffered | Unix socket + shared memory |
-
-A producer's targets choose the mode of each connection. A consumer binds either a `tcp://` address or a Unix socket path (`unix://path` and `shm://path` are equivalent when binding). A consumer bound to a Unix socket accepts both buffered and unbuffered producers, and each producer declares its mode in the handshake. A consumer bound to `tcp://` only accepts buffered producers.
-
-## Concepts
-
-### Producers and consumers
-A producer connects to a set of consumer addresses (targets) that can change at runtime, at most `URIEL_MAX_TARGETS` (31) at once, and fans each frame out to them. A consumer binds a single address, accepts any number of producers, and takes frames from them in turn (round-robin). A consumer replies to each frame; the reply travels back to the producer that sent it.
-
-### Tokens (per consumer)
-A producer keeps a separate token bucket for every consumer, each holding up to `max_tokens` tokens. Handing a frame to a consumer takes one token from its bucket, so a slow consumer only throttles itself.
-
-Every frame a consumer is handed owes the producer exactly one token back:
-- A **REPLY** returns it (`uriel_reply`). Each frame takes exactly one reply; a second one is rejected.
-- A **DROP** returns it without a reply. The consumer sends one automatically for a frame that was superseded by a newer one before `uriel_recv` returned it, and for the previous frame if `uriel_recv` is called again without replying to it.
-
-So tokens can't leak: every frame is either replied to or dropped. When a consumer disconnects, the producer reclaims its tokens anyway, and the consumer starts with a full bucket when it reconnects.
-
-### Newest frame wins
-`uriel_recv` always returns the newest frame from the producer whose turn it is:
-- **At the consumer:** it reads every frame that has arrived from that producer, keeps the newest, and DROPs the older ones.
-- **At the producer (unbuffered only):** a consumer is only ever handed the newest published frame, and only when it has a token. Frames published while it was busy are skipped.
-
-"Newest" means newest *that has arrived*. Over TCP, a frame still in transit isn't visible yet, so recv returns the newest complete one; guaranteeing the producer's actual newest frame would need a round trip per frame.
-
-### Dispatch
-**Buffered consumers (push).** `uriel_send` writes the frame to the socket of every connected buffered consumer that has a token. One without a token is skipped for that frame.
-
-**Unbuffered consumers (pull).** `uriel_send` writes the frame once into a chunk of the shared memory pool and makes it the producer's `latest` frame. A consumer is handed `latest` when:
-- `uriel_send` publishes it and the consumer has a token, or
-- the consumer returns a token (REPLY or DROP) and hasn't been handed `latest` yet.
-
-A consumer that connects is never handed a frame published before it connected; it gets the next one sent.
-
-### Dynamic targets
-Targets can be given at creation and added or removed at any time with `uriel_add_target` / `uriel_remove_target`, from any thread, while `uriel_send` and `uriel_recv_reply` are running.
-
-- **Adding** tries to connect once, synchronously, so a target whose consumer is already up is usable as soon as the call returns. If the consumer isn't reachable yet, the target is still added and is retried in the background (see Reconnection).
-- **Removing** closes the connection, reclaims the target's tokens and held chunks, and stops reconnecting. Replies already received from that consumer are still delivered by `uriel_recv_reply`.
-- **Disconnect vs remove:** a disconnected target is still a target, and the producer keeps reconnecting to it. Only removal stops that.
-
-### Sequence numbers
-Every frame carries the `uint32_t seq_num` given to `uriel_send`, and its reply carries it back, so the caller can match replies to frames. Uriel doesn't interpret it: which frame is newest is tracked internally, in the order frames were sent.
-
-### Identity
-Every producer and consumer has an identity made up of:
-- `source_name`: the name given at creation. It does not need to be unique.
-- `source_id`: a random 64-bit ID generated at creation, which disambiguates endpoints with the same name.
-- `source_ip`: the peer's IP address as seen by the other side, if available (empty for Unix socket connections).
-- `source_host`: an optional `host_name` given at creation. It is meant for TCP connections over the internet, where the IP alone may be meaningless (NAT, proxies). It is empty if not set.
-
-All four are exchanged during the handshake and exposed on every received `uriel_message_t`.
-
-### Sizes
-`max_send_size` always means the maximum data size of messages sent **by the side that sets it**: frames for a producer, replies for a consumer. Each side tells the other its `max_send_size` during the handshake, so the receiving side can reject anything larger. Sending more than `max_send_size` bytes returns `URIEL_ERR_TOO_LARGE`.
-
-### Reconnection
-A consumer always restarts at the same address. If a producer loses a connection to a target (broken pipe or a similar error), it drops that consumer and, until the target is removed, keeps retrying the same target address in the background with capped exponential backoff (50 ms doubling up to 1 s). Once it reconnects, a fresh handshake is done and the consumer starts with a full bucket.
-
-### Threading
-- **Producer:** `uriel_send`, `uriel_recv_reply`, `uriel_add_target` and `uriel_remove_target` may all be called concurrently from different threads (typically one sending thread and one receiving thread). Concurrent calls to `uriel_send` are serialized. Internally, a **reader thread** handles everything consumers send back, and a **connector thread** retries unreachable targets.
-- **Consumer:** `uriel_recv` and `uriel_reply` must be called from the same thread. Internally, an **accept thread** accepts and handshakes new producers; it has to be separate because a connecting producer waits for the consumer's half of the handshake, while your thread may be busy with a frame.
-- `uriel_destroy_*` may be called from any thread. Any call blocked on that producer or consumer returns `URIEL_ERR_CLOSED`. After destroy returns, the handle must not be used.
-
-## API
-
-### void uriel_set_log_callback(uriel_log_fn fn, void* user_data)
-Registers a callback that receives Uriel's internal diagnostic messages (connections, disconnects, handshake failures), with `user_data` passed through unchanged. Uriel is silent by default, and passing NULL stops logging. The callback may be called from Uriel's background threads. Set it once at startup, before other calls.
-
-### const char* uriel_version(void)
-Returns the library version string, for example `"0.2.0"`.
-
-### uriel_producer_t* uriel_create_producer(uint32_t max_tokens, uint64_t max_send_size, const char* source_name, const char* host_name, const char** targets, uriel_error_t* error)
-Creates a producer with name `source_name`. `targets` is an optional NULL-terminated list of initial targets (any mix of `tcp://`, `unix://` and `shm://`, at most 31), and each is added as if by `uriel_add_target`. Pass NULL to start with no targets. `max_tokens` is the size of each consumer's token bucket. `host_name` may be NULL.
-
-Creating a producer also creates its shared memory pool (see Unbuffered connections) and starts the reader and connector threads.
-
-### uriel_error_t uriel_add_target(uriel_producer_t* producer, const char* address)
-Adds a target (see Dynamic targets). Returns `URIEL_OK` whether or not the consumer was reachable, `URIEL_ERR_INVALID` if the address is malformed or is already a target, and `URIEL_ERR_FULL` if the producer already has 31 targets.
-
-### uriel_error_t uriel_remove_target(uriel_producer_t* producer, const char* address)
-Removes a target (see Dynamic targets). `address` must match the string it was added with. Returns `URIEL_ERR_INVALID` if it isn't a target.
-
-### void uriel_destroy_producer(uriel_producer_t* producer)
-Stops the background threads, closes all connections, unmaps the pool, and frees the producer.
-
-### uriel_error_t uriel_send(uriel_producer_t* producer, const uint8_t* data, uint64_t data_size, uint32_t seq_num)
-Sends a frame (see Dispatch): publishes it to the pool if any unbuffered consumer is connected, and pushes it to every buffered consumer with a token. A failure on one connection drops that consumer (see Reconnection) and does not fail the send for the others.
-
-Returns `URIEL_OK` if the frame was published or pushed to at least one consumer. A published frame counts even if no unbuffered consumer had a token, since they'll be handed it (or something newer) when their tokens return. Returns `URIEL_ERR_DROPPED` otherwise, and `URIEL_ERR_TOO_LARGE` if `data_size > max_send_size`.
-
-### uriel_message_t* uriel_recv_reply(uriel_producer_t* producer, uriel_error_t* error)
-Blocks until a reply from any consumer is available, then returns it. The `source_*` fields describe the consumer that sent it, and `seq_num` is the frame the reply answers. By the time a reply is returned, its token is already back in the consumer's bucket. Returns NULL and populates `error` on failure.
-
-### uriel_consumer_t* uriel_create_consumer(const char* source_name, const char* host_name, uint64_t max_send_size, const char* address, uriel_error_t* error)
-Creates a consumer with name `source_name`, binds at `address`, and starts the accept thread. `max_send_size` is the maximum size of the replies this consumer sends. `host_name` may be NULL.
-
-### void uriel_destroy_consumer(uriel_consumer_t* consumer)
-Stops the accept thread, closes all connections, removes the socket file for a Unix socket address, and frees the consumer.
-
-### uriel_message_t* uriel_recv(uriel_consumer_t* consumer, uriel_error_t* error)
-Blocks until a frame is available from any producer, then returns it. Producers take turns (round-robin), and from each you get the newest frame that has arrived (see Newest frame wins). If the previous frame was never replied to, its token is returned (DROP) first. The returned message owns its own copy of the data. Returns NULL and populates `error` if the recv fails for any reason. A producer that disconnects is removed silently.
-
-### uriel_error_t uriel_reply(uriel_consumer_t* consumer, const uint8_t* data, uint64_t data_size)
-Replies to the frame most recently returned by `uriel_recv`, which returns its token to the producer. Returns `URIEL_ERR_INVALID` if there is no frame to reply to (nothing received yet, or already replied), `URIEL_ERR_TOO_LARGE` if `data_size > max_send_size` (the frame can still be replied to), and `URIEL_ERR_BROKEN_PIPE` if its producer has disconnected.
-
-### void uriel_message_free(uriel_message_t* msg)
-Frees a message returned by `uriel_recv` or `uriel_recv_reply`. Safe to call with NULL.
-
-## Connection internals
-
-### Wire protocol
-Every message on a socket starts with a 32-byte big-endian header, `{type, seq, chunk, data_size, payload_size}`, followed by `payload_size` bytes of payload:
-
-| Type    | Direction           | Meaning                                                                 |
-| ------- | ------------------- | ----------------------------------------------------------------------- |
-| `FRAME` | producer → consumer | A frame. Buffered: the data is the payload. Unbuffered: no payload; `chunk` says where the data is in the pool. |
-| `REPLY` | consumer → producer | A reply (always the payload, in both modes), returning the frame's token. `chunk` echoes the frame's. |
-| `DROP`  | consumer → producer | Returns a frame's token without a reply. `chunk` echoes the frame's.    |
-
-Sockets are read without blocking, one message at a time, so a producer sending a large frame slowly over TCP never blocks a thread that serves other sockets.
-
-### Handshake
-The producer sends a hello: magic, version, mode (buffered or unbuffered), identity, `max_send_size`, and the pool's layout (chunk count and stride). For `shm://` it also passes the pool's memfd over the socket (`SCM_RIGHTS`). The consumer answers with its own hello, with `ack` set to accept (or 0 to reject, for example an unbuffered producer on a TCP consumer). Both sides apply a 2-second timeout to the handshake.
-
-### Unbuffered connections: the shared memory pool
-Each producer has one pool, shared by all of its unbuffered consumers. It is a memfd divided into equal chunks, each big enough for one frame. The producer maps it read-write; consumers map it **read-only**.
-
-**Size.** The pool has `max_tokens × 31 + 2` chunks: enough for every consumer to hold `max_tokens` different chunks, plus `latest`, plus one being written, so a send never has to drop for lack of a chunk. This only reserves address space. Pages get memory when written, and because a send always reuses the **lowest-index** free chunk, only the handful of chunks in use at the same time ever get memory (about three for one consumer).
-
-**Bookkeeping.** All of it lives in the producer's own memory under one mutex (`state_mu`), with no atomics in shared memory:
-- `refs[i]`: how many consumers hold chunk `i` (plus one while `uriel_send` is writing it).
-- `latest`: the chunk with the newest frame. It is never overwritten, even when no one holds it, so there is always a newest frame to hand out.
-- `gens[i]`: an internal counter of publishes, used to tell whether a consumer has already been handed the newest frame.
-- Per consumer: its tokens, the generation it was last handed, and the list of chunks it holds.
-
-A chunk is **free** when `refs[i] == 0 && i != latest`.
-
-**The four operations:**
-1. **Send:** claim the lowest free chunk (`refs = 1`), copy the frame in *without* the lock, then under the lock drop the writer's hold, make it `latest`, and hand it to every unbuffered consumer that has a token.
-2. **Hand out** (`dispatch`): if the consumer has a token and hasn't been handed `latest`, write a FRAME with `chunk = latest`, then `refs[latest]++`, add it to the consumer's held list, and take a token.
-3. **Token returned** (REPLY or DROP, in the reader thread): remove the echoed chunk from the consumer's held list (a chunk it doesn't hold is a protocol error), `refs--`, give the token back, and hand out `latest` if the consumer hasn't had it.
-4. **Consumer gone** (disconnect or removal): release every chunk in its held list.
-
-**Why it's safe without atomics.** A consumer only learns about a chunk from a FRAME message, which is written after the copy has finished and the lock has been released. The socket send and receive are system calls, which order the copy before the consumer's read. After that, the chunk can't be reused until the consumer returns its token, which it only does after it has copied the data out in `uriel_recv`.
-
-## Message Definitions
-
-```c
-typedef struct uriel_message_t {
-  const char *source_name;  /* sender's source_name */
-  uint64_t source_id;       /* sender's random unique ID */
-  const char *source_ip;    /* sender's IP, "" if unavailable (Unix socket) */
-  const char *source_host;  /* sender's host_name, "" if not set */
-  uint32_t seq_num;         /* frame seq_num (or the frame a reply answers) */
-  uint64_t data_size;
-  uint8_t *data;
-} uriel_message_t;
+```sh
+cargo test --workspace                 # the Rust library; also regenerates the C header
+(cd go && go test ./...)               # the Go bindings
+(cd python && uv run pytest)           # the Python bindings
 ```
 
-## Errors
+Install liburiel again whenever the Rust library changes, before testing the Go bindings.
 
-```c
-typedef enum {
-  URIEL_OK = 0,
-  URIEL_ERR_DROPPED,      /* no consumer could take the frame so it was dropped */
-  URIEL_ERR_TOO_LARGE,    /* data_size > max_send_size */
-  URIEL_ERR_BROKEN_PIPE,  /* the peer disconnected */
-  URIEL_ERR_INVALID,      /* bad address/argument, or no frame to reply to */
-  URIEL_ERR_FULL,         /* already at URIEL_MAX_TARGETS targets */
-  URIEL_ERR_CLOSED,       /* the handle was destroyed */
-  URIEL_ERR_INTERNAL,     /* internal failure catch-all */
-} uriel_error_t;
-```
+### Releasing
+
+The Rust crate and the Python package share one version. To release one:
+
+1. Set it in `rust/Cargo.toml` (e.g. `0.2.0`, or `0.2.0-rc1` for a release candidate) and in `python/pyproject.toml` (`0.2.0`, or `0.2.0rc1`).
+2. Update the lock files: `cargo update --workspace` and `(cd python && uv lock)`.
+3. Commit, push, and push the tag `v0.2.0` (or `v0.2.0-rc1`).
+
+The tag starts `.github/workflows/release.yml`. It publishes the Python package to PyPI (a release candidate to TestPyPI), puts liburiel and the Python files on a GitHub release, and tags the Go module `go/v0.2.0`.
+
+## License
+
+Apache 2.0. See [LICENSE](LICENSE).
