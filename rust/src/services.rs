@@ -427,7 +427,7 @@ pub(crate) fn wait_for_any<'a>(
 
 #[cfg(test)]
 mod tests {
-    use iceoryx2_bb_container::{relocatable_option::RelocatableOption, vector::Vector};
+    use iceoryx2_bb_container::relocatable_option::RelocatableOption;
 
     use super::*;
     use crate::{

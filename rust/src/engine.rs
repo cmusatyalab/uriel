@@ -374,8 +374,6 @@ impl Engine {
 
 #[cfg(test)]
 mod tests {
-    use iceoryx2_bb_container::string::String as _;
-
     use super::*;
     use crate::ipc::types::Outcome;
     use crate::routing::ids::{EdgeId, OfferId, ProducerName};

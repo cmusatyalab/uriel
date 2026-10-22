@@ -24,9 +24,7 @@ class Client(LockedHandle):
     """Bridges local producers to the servers that run a flow's engines. It may be used from any
     thread."""
 
-    def __init__(
-        self, name: str, local_server: str, *, remote: RemoteServer | None = None
-    ) -> None:
+    def __init__(self, name: str, local_server: str, *, remote: RemoteServer | None = None) -> None:
         """Creates the client `name`, of the local server `local_server`, and of `remote`, if
         given."""
         with options("client") as opts:
