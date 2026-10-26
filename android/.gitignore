@@ -1,0 +1,8 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+
+# The example needs the certificate of the server you run (see README.md).
+example/src/main/assets/server-certificate.der

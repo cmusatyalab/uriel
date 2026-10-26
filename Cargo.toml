@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
 members = ["rust", "bench", "server", "examples/h264"]
+# Built on its own, because it turns on uriel's `in-process` feature, which a workspace build would
+# turn on for every member.
+exclude = ["android/uniffi"]
 
 [workspace.package]
 edition = "2024"

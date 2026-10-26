@@ -45,6 +45,8 @@ jobs:
           # Services in the process's memory instead of shared memory, as on Android.
           cargo clippy -p uriel --all-targets --features in-process --locked -- -D warnings
           cargo test -p uriel --features in-process --locked
+          # The Android client is its own workspace, because it turns on `in-process`.
+          (cd android/uniffi && cargo fmt --check && cargo clippy --all-targets --locked -- -D warnings && cargo test --locked)
 
       - name: Check that the C header is up to date
         # The build regenerates it from rust/src/ffi.rs.

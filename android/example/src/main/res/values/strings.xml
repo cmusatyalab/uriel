@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Uriel example</string>
+    <string name="server_address_hint">Server address, e.g. 10.0.2.2:4433</string>
+    <string name="engine_hint">Engine name on the server</string>
+    <string name="connect">Connect</string>
+    <string name="message_hint">Text to send</string>
+    <string name="send">Send</string>
+</resources>

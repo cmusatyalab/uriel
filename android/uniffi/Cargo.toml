@@ -1,0 +1,29 @@
+[package]
+name = "uriel-android"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Uriel for Android: a client that sends inputs to a remote server, with Kotlin bindings from UniFFI"
+publish = false
+
+[lib]
+name = "uriel_android"
+# cdylib is the library the AAR ships; lib lets the tests and uniffi-bindgen link it.
+crate-type = ["cdylib", "lib"]
+
+[features]
+# The uniffi-bindgen program that generates the Kotlin bindings.
+cli = ["uniffi/cli"]
+
+[[bin]]
+name = "uniffi-bindgen"
+required-features = ["cli"]
+
+[dependencies]
+# An app on Android has no other process to share memory with, so everything stays in this one.
+uriel = { path = "../../rust", features = ["in-process"] }
+uniffi = "0.32"
+thiserror = "2"
+
+# Not part of the root workspace (see its `exclude`), so that `in-process` stays off there.
+[workspace]
