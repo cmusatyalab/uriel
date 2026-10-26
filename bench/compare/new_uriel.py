@@ -63,7 +63,7 @@ def app(resolution: str, recorder: common.Recorder) -> None:
         client.add_flow(FLOW, FLOW_SPEC)
         while not recorder.done:
             sent = time.perf_counter_ns()
-            producer.send(FLOW, frame)
+            producer.send(frame)
             wait_for_result(events)
             recorder.record(time.perf_counter_ns() - sent)
 

@@ -61,7 +61,7 @@ func main() {
 	check(client.AddFlow("hello", flow))
 
 	// 4. The app sends an input.
-	_, err = producer.Send("hello", []byte("hello, uriel"))
+	_, err = producer.Send([]byte("hello, uriel"))
 	check(err)
 
 	// 5. The engine gets it, and reports its result.

@@ -77,24 +77,23 @@ func (p *Producer) Loan() ([]byte, error) {
 	return unsafe.Slice((*byte)(unsafe.Pointer(buf)), p.maxInputSize), nil
 }
 
-// Publish publishes the first n bytes of the loaned buffer on flow, and returns the input's sequence
-// number, which the events about the input carry ([InputID]).
-func (p *Producer) Publish(flow string, n int) (uint64, error) {
+// Publish publishes the first n bytes of the loaned buffer, and returns the input's sequence number,
+// which the events about the input carry ([InputID]). The client sends the input through every flow
+// that lists the producer; if there is none, nothing takes it.
+func (p *Producer) Publish(n int) (uint64, error) {
 	if err := p.check(); err != nil {
 		return 0, err
 	}
-	cFlow := C.CString(flow)
-	defer C.free(unsafe.Pointer(cFlow))
 	var seq C.uint64_t
 	err := call(func() C.uriel_status_t {
-		return C.uriel_producer_publish_input(p.handle, C.size_t(n), cFlow, &seq)
+		return C.uriel_producer_publish_input(p.handle, C.size_t(n), &seq)
 	})
 	return uint64(seq), err
 }
 
-// Send copies data into a loaned buffer and publishes it on flow. It fails with [ErrSizeExceeded]
-// if data is larger than the producer's maximum input size.
-func (p *Producer) Send(flow string, data []byte) (uint64, error) {
+// Send copies data into a loaned buffer and publishes it. It fails with [ErrSizeExceeded] if data is
+// larger than the producer's maximum input size.
+func (p *Producer) Send(data []byte) (uint64, error) {
 	if len(data) > p.maxInputSize {
 		return 0, &Error{
 			kind:    ErrSizeExceeded,
@@ -105,7 +104,7 @@ func (p *Producer) Send(flow string, data []byte) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return p.Publish(flow, copy(buf, data))
+	return p.Publish(copy(buf, data))
 }
 
 // Close destroys the producer, and unlocks the goroutine from its thread.

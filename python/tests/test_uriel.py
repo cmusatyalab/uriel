@@ -76,11 +76,27 @@ def fixture():
     f.close()
 
 
+def test_add_producer_with_events_reads_the_producers_events(fixture):
+    other_name = unique("camera")
+    with (
+        fixture.client.add_producer_with_events(other_name) as events,
+        uriel.Producer(other_name, max_input_size=MAX_INPUT_SIZE) as other,
+    ):
+        fixture.client.add_flow(unique("flow"), chain(other_name, fixture.engine_name))
+
+        seq = other.send(b"frame")
+
+        deadline = time.monotonic() + WAIT
+        while (event := events.next(deadline - time.monotonic())).kind != uriel.EventKind.SENT:
+            pass
+        assert (event.id.producer, event.id.seq) == (other_name, seq)
+
+
 def test_input_reaches_engine_and_result_reaches_app(fixture):
     with uriel.Subscription.producer(fixture.producer_name) as events:
         fixture.add_flow()
 
-        seq = fixture.producer.send(FLOW, b"frame")
+        seq = fixture.producer.send(b"frame")
         input = fixture.engine.next(WAIT)
         assert bytes(input.data) == b"frame"
         assert input.id.producer == fixture.producer_name
@@ -105,14 +121,14 @@ def test_loaned_input_is_published_in_place(fixture):
     buf = fixture.producer.loan()
     assert len(buf) == MAX_INPUT_SIZE
     buf[:8] = b"in place"
-    fixture.producer.publish(FLOW, 8)
+    fixture.producer.publish(8)
 
     assert bytes(fixture.engine.next(WAIT).data) == b"in place"
 
 
 def test_numpy_reads_an_input_without_copying_it(fixture):
     fixture.add_flow()
-    fixture.producer.send(FLOW, np.arange(8, dtype=np.uint8))
+    fixture.producer.send(np.arange(8, dtype=np.uint8))
 
     input = fixture.engine.next(WAIT)
     frame = np.frombuffer(input.data, dtype=np.uint8)
@@ -123,7 +139,7 @@ def test_numpy_reads_an_input_without_copying_it(fixture):
 
 def test_input_cannot_be_read_after_its_outcome(fixture):
     fixture.add_flow()
-    fixture.producer.send(FLOW, b"frame")
+    fixture.producer.send(b"frame")
     input = fixture.engine.next(WAIT)
 
     fixture.engine.drop()
@@ -139,7 +155,7 @@ def test_error_says_what_failed(fixture):
 
 def test_oversized_input_is_refused(fixture):
     with pytest.raises(uriel.SizeExceededError):
-        fixture.producer.send(FLOW, bytes(MAX_INPUT_SIZE + 1))
+        fixture.producer.send(bytes(MAX_INPUT_SIZE + 1))
 
 
 def test_engine_without_input_times_out(fixture):
@@ -181,7 +197,7 @@ def test_engine_on_a_thread_of_its_own_gets_inputs():
         ):
             client.add_producer(producer_name)
             client.add_flow(FLOW, chain(producer_name, engine_name))
-            producer.send(FLOW, b"frame")
+            producer.send(b"frame")
             thread.join(WAIT)
 
     assert results == [b"frame"]
@@ -265,7 +281,7 @@ timeout = "5s"
 """,
         )
 
-        fixture.producer.send(FLOW, b"frame")
+        fixture.producer.send(b"frame")
         assert fixture.engine.next(WAIT) is not None
         output = fixture.engine.loan()
         output[:5] = b"tiles"
@@ -281,7 +297,7 @@ def test_engine_subscriber_sees_the_engines_result(fixture):
     with uriel.Subscription.engine(fixture.engine_name) as events:
         fixture.add_flow()
 
-        seq = fixture.producer.send(FLOW, b"frame")
+        seq = fixture.producer.send(b"frame")
         assert fixture.engine.next(WAIT) is not None
         fixture.engine.forward(result=b"cat")
 
@@ -297,7 +313,7 @@ def test_engine_waits_for_an_event_of_an_engine_it_subscribes_to(fixture):
         fusion.subscribe(fixture.engine_name)
         fixture.add_flow()
 
-        seq = fixture.producer.send(FLOW, b"frame")
+        seq = fixture.producer.send(b"frame")
         assert fixture.engine.next(WAIT) is not None
         fixture.engine.forward(result=b"cat")
 
@@ -322,7 +338,7 @@ def test_fusion_publishes_a_derived_result_its_subscribers_get(fixture):
         fixture.server.add_engine(fusion_name)
         fusion.subscribe(fixture.engine_name)
         fixture.add_flow()
-        fixture.producer.send(FLOW, b"frame")
+        fixture.producer.send(b"frame")
         assert fixture.engine.next(WAIT) is not None
         fixture.engine.forward(result=b"cat")
         deadline = time.monotonic() + WAIT
@@ -343,11 +359,11 @@ def test_reader_and_engine_both_get_the_input(fixture):
     with uriel.Reader(fixture.producer_name) as reader:
         fixture.add_flow()
 
-        seq = fixture.producer.send(FLOW, b"frame")
+        seq = fixture.producer.send(b"frame")
         input = reader.next(WAIT)
 
         assert input.id == uriel.InputId(fixture.producer_name, fixture.producer.session, seq)
-        assert (bytes(input.data), input.flow, input.payload_type) == (b"frame", FLOW, INPUT_TYPE)
+        assert (bytes(input.data), input.payload_type) == (b"frame", INPUT_TYPE)
         assert input.lost == 0
         assert fixture.engine.next(WAIT) is not None
 
@@ -358,8 +374,8 @@ def test_reader_reads_inputs_in_order():
         uriel.Reader(name) as reader,
         uriel.Producer(name, max_input_size=MAX_INPUT_SIZE) as producer,
     ):
-        producer.send(FLOW, b"one")
-        producer.send(FLOW, b"two")
+        producer.send(b"one")
+        producer.send(b"two")
 
         assert bytes(reader.next(WAIT).data) == b"one"
         assert bytes(reader.next(WAIT).data) == b"two"
@@ -372,7 +388,7 @@ def test_read_input_cannot_be_read_after_the_next_poll():
         uriel.Reader(name) as reader,
         uriel.Producer(name, max_input_size=MAX_INPUT_SIZE) as producer,
     ):
-        producer.send(FLOW, b"frame")
+        producer.send(b"frame")
         input = reader.next(WAIT)
 
         reader.poll()

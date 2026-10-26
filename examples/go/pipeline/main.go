@@ -265,7 +265,7 @@ func film(ctx context.Context, ready chan<- error) error {
 		}
 		draw(buf[:frameSize], frame)
 		at := uriel.Now()
-		seq, err := camera.Publish(flowName, frameSize)
+		seq, err := camera.Publish(frameSize)
 		if err != nil {
 			return err
 		}

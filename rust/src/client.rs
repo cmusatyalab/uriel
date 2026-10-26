@@ -86,7 +86,7 @@ impl Client {
     }
 
     /// Adds the flow `name` described by `spec`: installs its engines' parts on the servers, and
-    /// routes the inputs its producers publish on `name`. Its producers must be added first. The
+    /// routes the inputs its producers publish. Its producers must be added first. The
     /// local part must install. If the remote server is not connected yet, the remote part is
     /// installed once it is; until then, inputs bound for it wait at the client, the newest
     /// replacing the rest.
@@ -282,6 +282,24 @@ mod tests {
     fn next_input(engine: &mut Engine) -> u8 {
         engine.wait(WAIT).unwrap();
         engine.poll_input().unwrap().data[0]
+    }
+
+    #[test]
+    fn producer_input_reaches_every_flow_that_lists_the_producer() {
+        let mut fixture = Fixture::new();
+        let first_name = unique("detector");
+        let second_name = unique("tracker");
+        let mut first = fixture.engine(&first_name);
+        let mut second = fixture.engine(&second_name);
+        let first_spec = fixture.chain(ONE_TOKEN, &[&first_name]);
+        let second_spec = fixture.chain(ONE_TOKEN, &[&second_name]);
+        fixture.client.add_flow("first", &first_spec).unwrap();
+        fixture.client.add_flow("second", &second_spec).unwrap();
+
+        publish(&mut fixture.producer, 7);
+
+        assert_eq!(next_input(&mut first), 7);
+        assert_eq!(next_input(&mut second), 7);
     }
 
     #[test]

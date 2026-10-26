@@ -23,7 +23,10 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    sync::mpsc::{self, TryRecvError},
+    sync::{
+        Arc,
+        mpsc::{self, TryRecvError},
+    },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
@@ -678,15 +681,16 @@ impl Worker {
         );
     }
 
-    /// Hands a producer's newest input to the flow it was published on.
+    /// Hands a producer's newest input to every flow that lists the producer. If there is none,
+    /// nothing consumes the input.
     fn admit(&mut self, input: ReceivedInput, now: Instant) {
-        let Some(flow) = self.flows.get_mut(&input.flow) else {
-            // No flow of that name was added: nothing consumes the input.
-            return;
-        };
-        if flow.producers.contains(&input.id.producer) {
+        for flow in self
+            .flows
+            .values_mut()
+            .filter(|flow| flow.producers.contains(&input.id.producer))
+        {
             let data = Data {
-                bytes: input.data,
+                bytes: Arc::clone(&input.data),
                 payload_type: input.payload_type,
             };
             flow.router

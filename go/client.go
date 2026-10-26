@@ -109,8 +109,25 @@ func (c *Client) withName(name string, f func(*C.char) C.uriel_status_t) error {
 // AddProducer takes the inputs of the producer name.
 func (c *Client) AddProducer(name string) error {
 	return c.withName(name, func(n *C.char) C.uriel_status_t {
-		return C.uriel_client_add_producer(c.handle, n)
+		return C.uriel_client_add_producer(c.handle, n, nil)
 	})
+}
+
+// AddProducerWithEvents takes the inputs of the producer name, and returns a subscription to the
+// events about them, the same as [SubscribeProducer]. The subscription exists before the client
+// takes the first input, so it misses no event. It belongs to the calling goroutine (see Threads in
+// the package documentation): to read the events in another goroutine, call this in that one.
+func (c *Client) AddProducerWithEvents(name string) (*Subscription, error) {
+	t := lockThread()
+	s := &Subscription{thread: t}
+	err := c.withName(name, func(n *C.char) C.uriel_status_t {
+		return C.uriel_client_add_producer(c.handle, n, &s.handle)
+	})
+	if err != nil {
+		t.release()
+		return nil, err
+	}
+	return s, nil
 }
 
 // RemoveProducer stops taking the inputs of the producer name. It fails while a flow uses it.

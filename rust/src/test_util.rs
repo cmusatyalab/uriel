@@ -38,5 +38,5 @@ pub(crate) fn publish(producer: &mut Producer, value: u8) -> InputId {
     for byte in &mut buf[..INPUT_LEN] {
         byte.write(value);
     }
-    producer.publish_input(INPUT_LEN, FLOW).unwrap()
+    producer.publish_input(INPUT_LEN).unwrap()
 }

@@ -12,7 +12,7 @@ use crate::{
     Error, Result,
     envelope::Envelope,
     events::EventPublisher,
-    ipc::types::{EventRecord, FlowName, PayloadType},
+    ipc::types::{EventRecord, PayloadType},
     routing::ids::{InputId, ProducerName},
     services::{self, InputPayload},
 };
@@ -26,8 +26,6 @@ pub(super) struct Producers {
 pub(super) struct ReceivedInput {
     /// The id the producer gave the input.
     pub(super) id: InputId,
-    /// The flow the producer published the input on.
-    pub(super) flow: FlowName,
     pub(super) data: Arc<[u8]>,
     /// How to read `data`, as the producer names it.
     pub(super) payload_type: PayloadType,
@@ -170,7 +168,6 @@ impl ProducerPorts {
                 session: header.session,
                 seq: header.seq,
             },
-            flow: header.flow,
             data: Arc::from(data),
             payload_type: header.payload_type,
         }))
@@ -182,7 +179,7 @@ mod tests {
     use super::*;
     use crate::{
         Producer,
-        test_util::{FLOW, INPUT_LEN, MAX_INPUT_SIZE, TIMEOUT, publish, unique},
+        test_util::{INPUT_LEN, MAX_INPUT_SIZE, TIMEOUT, publish, unique},
     };
 
     fn node() -> Node<ipc::Service> {
@@ -219,22 +216,21 @@ mod tests {
         publish(&mut producer_a, 2);
         publish(&mut producer_b, 9);
 
-        // Sessions are random, so compare everything else: producer, sequence number, flow, data.
+        // Sessions are random, so compare everything else: producer, sequence number, data.
         let mut inputs: Vec<_> = wait_for_inputs(&producers)
             .into_iter()
             .map(|input| {
                 (
                     input.id.producer.to_string(),
                     input.id.seq,
-                    input.flow.to_string(),
                     input.data.to_vec(),
                 )
             })
             .collect();
         inputs.sort();
         let mut expected = vec![
-            (name_a, 2, FLOW.to_string(), vec![2; INPUT_LEN]),
-            (name_b, 1, FLOW.to_string(), vec![9; INPUT_LEN]),
+            (name_a, 2, vec![2; INPUT_LEN]),
+            (name_b, 1, vec![9; INPUT_LEN]),
         ];
         expected.sort();
         assert_eq!(inputs, expected);

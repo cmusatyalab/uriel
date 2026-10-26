@@ -105,7 +105,7 @@ func TestInputReachesEngineAndResultReachesApp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	seq, err := f.producer.Send(flowName, []byte("frame"))
+	seq, err := f.producer.Send([]byte("frame"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,6 +148,39 @@ func TestInputReachesEngineAndResultReachesApp(t *testing.T) {
 	}
 }
 
+func TestAddProducerWithEventsReadsTheProducersEvents(t *testing.T) {
+	f := newFixture(t)
+	other := unique("other")
+	events, err := f.client.AddProducerWithEvents(other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer events.Close()
+	producer, err := NewProducer(other, inputType, maxInputSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer producer.Close()
+	if err := f.client.AddFlow(unique("flow"), chain(other, f.names.engine)); err != nil {
+		t.Fatal(err)
+	}
+
+	seq, err := producer.Send([]byte("frame"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for {
+		event, err := events.Next(timeout(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if event.Kind == EventSent && event.ID.Producer == other && event.ID.Seq == seq {
+			return
+		}
+	}
+}
+
 func TestLoanedInputIsPublishedInPlace(t *testing.T) {
 	f := newFixture(t)
 	if err := f.client.AddFlow(flowName, chain(f.names.producer, f.names.engine)); err != nil {
@@ -162,7 +195,7 @@ func TestLoanedInputIsPublishedInPlace(t *testing.T) {
 		t.Fatalf("loaned %d bytes, want %d", len(buf), maxInputSize)
 	}
 	n := copy(buf, "in place")
-	if _, err := f.producer.Publish(flowName, n); err != nil {
+	if _, err := f.producer.Publish(n); err != nil {
 		t.Fatal(err)
 	}
 
@@ -191,7 +224,7 @@ func TestErrorSaysWhatFailed(t *testing.T) {
 func TestOversizedInputIsRefused(t *testing.T) {
 	f := newFixture(t)
 
-	_, err := f.producer.Send(flowName, make([]byte, maxInputSize+1))
+	_, err := f.producer.Send(make([]byte, maxInputSize+1))
 
 	if !errors.Is(err, ErrSizeExceeded) {
 		t.Fatalf("got %v, want ErrSizeExceeded", err)
@@ -328,7 +361,7 @@ timeout = "5s"
 		t.Fatal(err)
 	}
 
-	if _, err := f.producer.Send(flowName, []byte("frame")); err != nil {
+	if _, err := f.producer.Send([]byte("frame")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.engine.Next(timeout(t)); err != nil {
@@ -363,7 +396,7 @@ func TestEngineSubscriberSeesTheEnginesResult(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	seq, err := f.producer.Send(flowName, []byte("frame"))
+	seq, err := f.producer.Send([]byte("frame"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -406,7 +439,7 @@ func TestEngineWaitsForAnEventOfAnEngineItSubscribesTo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	seq, err := f.producer.Send(flowName, []byte("frame"))
+	seq, err := f.producer.Send([]byte("frame"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -461,7 +494,7 @@ func TestFusionPublishesADerivedResultItsSubscribersGet(t *testing.T) {
 	if err := f.client.AddFlow(flowName, chain(f.names.producer, f.names.engine)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.producer.Send(flowName, []byte("frame")); err != nil {
+	if _, err := f.producer.Send([]byte("frame")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.engine.Next(timeout(t)); err != nil {

@@ -1,19 +1,22 @@
 /*
- * The client: takes the inputs of the producer "hello-app", and sends them through the flow
- * "hello" to the engine "hello-upper", until Ctrl-C. Start it after the server, and before the
- * producer publishes: nothing takes an input published before the flow exists.
+ * The client: takes the inputs of the producer "hello-app", sends them through the flow "hello" to
+ * the engine "hello-upper", and prints the engine's result for each, until Ctrl-C. Start it after
+ * the server, and before the producer publishes: nothing takes an input published before the flow
+ * exists.
  *
  *     ./client
  */
+#include <inttypes.h>
 #include <signal.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <uriel/uriel.h>
 
 #define CLIENT_NAME "hello-client"
 #define SERVER_NAME "hello-server"
 #define PRODUCER_NAME "hello-app"
 #define FLOW_NAME "hello"
+/* How long to wait for an event before checking for Ctrl-C. */
+#define EVENT_WAIT_MS 200
 
 /* One edge, from the producer to the engine on the local server. */
 static const char *FLOW_SPEC =
@@ -44,8 +47,10 @@ int main(void) {
         fprintf(stderr, "client: %s\n", uriel_last_error());
         return 1;
     }
-    /* First the producer, then the flow that uses it. */
-    if (uriel_client_add_producer(client, PRODUCER_NAME) != URIEL_STATUS_T_OK ||
+    /* First the producer, then the flow that uses it. The client publishes the events about the
+     * producer's inputs, and add_producer gives a subscription to them, which misses none. */
+    uriel_subscription_t *events;
+    if (uriel_client_add_producer(client, PRODUCER_NAME, &events) != URIEL_STATUS_T_OK ||
         uriel_client_add_flow(client, FLOW_NAME, FLOW_SPEC) != URIEL_STATUS_T_OK) {
         fprintf(stderr, "flow: %s\n", uriel_last_error());
         uriel_client_destroy(client);
@@ -54,10 +59,26 @@ int main(void) {
     printf("client %s routes %s through the flow %s; Ctrl-C to stop\n", CLIENT_NAME,
            PRODUCER_NAME, FLOW_NAME);
 
-    /* The client works on its own thread; this one only waits for Ctrl-C. */
+    /* The client works on its own thread; this one reads the events. */
     while (!stopping) {
-        pause();
+        uriel_status_t status = uriel_subscription_wait(events, EVENT_WAIT_MS);
+        if (status == URIEL_STATUS_T_ERR_AGAIN) {
+            continue;
+        }
+        uriel_event_t event;
+        while (status == URIEL_STATUS_T_OK) {
+            status = uriel_subscription_poll(events, &event);
+            if (status == URIEL_STATUS_T_OK && event.kind == URIEL_EVENT_KIND_T_RESULT) {
+                printf("input %" PRIu64 ": %s replied: %.*s\n", event.id.seq, event.engine,
+                       (int)event.result_len, (const char *)event.result);
+            }
+        }
+        if (status != URIEL_STATUS_T_ERR_AGAIN) {
+            fprintf(stderr, "events: %s\n", uriel_last_error());
+            break;
+        }
     }
+    uriel_subscription_destroy(events);
     /* Destroying the client also removes its flow from the server. */
     uriel_client_destroy(client);
     return 0;

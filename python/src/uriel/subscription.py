@@ -14,21 +14,20 @@ class Subscription(ThreadHandle):
     A subscription must be used and closed on the thread that created it.
     """
 
-    def __init__(self, subscribe, name: str) -> None:
-        handle = create(subscribe, "uriel_subscription_t **", cstr(name))
+    def __init__(self, handle) -> None:
         super().__init__(handle, lib.uriel_subscription_destroy)
 
     @classmethod
     def producer(cls, name: str) -> "Subscription":
         """Subscribes to the events about the inputs of the producer `name`: what happened to each
         at each engine, and lost connections."""
-        return cls(lib.uriel_subscribe_producer, name)
+        return cls(create(lib.uriel_subscribe_producer, "uriel_subscription_t **", cstr(name)))
 
     @classmethod
     def engine(cls, name: str) -> "Subscription":
         """Subscribes to the events of the engine `name`: what happened to each input at that
         engine."""
-        return cls(lib.uriel_subscribe_engine, name)
+        return cls(create(lib.uriel_subscribe_engine, "uriel_subscription_t **", cstr(name)))
 
     def wait(self, timeout: float) -> bool:
         """Waits until an event is ready, or `timeout` seconds pass. Returns whether it may be

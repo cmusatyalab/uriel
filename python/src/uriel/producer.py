@@ -41,15 +41,16 @@ class Producer(ThreadHandle):
         check(lib.uriel_producer_new_input(self._live(), out))
         return view(out[0], self._max_input_size, writable=True)
 
-    def publish(self, flow: str, length: int) -> int:
-        """Publishes the first `length` bytes of the loaned buffer on `flow`, and returns the
-        input's sequence number, which the events about the input carry."""
+    def publish(self, length: int) -> int:
+        """Publishes the first `length` bytes of the loaned buffer, and returns the input's
+        sequence number, which the events about the input carry. The client sends the input through
+        every flow that lists the producer; if there is none, nothing takes it."""
         seq = ffi.new("uint64_t *")
-        check(lib.uriel_producer_publish_input(self._live(), length, cstr(flow), seq))
+        check(lib.uriel_producer_publish_input(self._live(), length, seq))
         return seq[0]
 
-    def send(self, flow: str, data) -> int:
-        """Copies `data`, any bytes-like object, into a loaned buffer and publishes it on `flow`."""
+    def send(self, data) -> int:
+        """Copies `data`, any bytes-like object, into a loaned buffer and publishes it."""
         data = memoryview(data).cast("B")
         if len(data) > self._max_input_size:
             raise SizeExceededError(
@@ -57,4 +58,4 @@ class Producer(ThreadHandle):
             )
         buf = self.loan()
         buf[: len(data)] = data
-        return self.publish(flow, len(data))
+        return self.publish(len(data))

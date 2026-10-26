@@ -34,7 +34,7 @@ package uriel
 
 // The ABI version of the header this package was written for. Installing a library of another
 // version stops the build here, rather than failing when the package runs.
-#define URIEL_GO_ABI_VERSION 2
+#define URIEL_GO_ABI_VERSION 3
 #if URIEL_ABI_VERSION != URIEL_GO_ABI_VERSION
 #error "the installed liburiel has a different ABI version than this package; install the release that matches it"
 #endif

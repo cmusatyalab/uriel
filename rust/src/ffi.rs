@@ -27,7 +27,7 @@ use crate::{
 };
 
 /// The version of the ABI that this library implements.
-pub const ABI_VERSION: u32 = 2;
+pub const ABI_VERSION: u32 = 3;
 
 /// The version of the ABI that the library implements. A caller built with a header of another
 /// version (`URIEL_ABI_VERSION`) must not use the library.
@@ -259,24 +259,21 @@ pub unsafe extern "C" fn uriel_producer_new_input(
     Status::from(result)
 }
 
-/// Publishes the first `len` bytes of the loaned buffer on the flow `flow`: the name a client
-/// added the flow with (`uriel_client_add_flow`). If no client has a flow of that name that lists
-/// this producer, nothing takes the input, and no event reports it. If `seq` is not null, it gets
-/// the input's sequence number: 1 for the producer's first input, then one more for each. Events
-/// about the input carry it. Fails with `ERR_SIZE_EXCEEDED` if `len` is more than
-/// `max_input_size`.
+/// Publishes the first `len` bytes of the loaned buffer. The client that takes the producer's
+/// inputs sends it through every flow that lists the producer (`uriel_client_add_flow`); if there
+/// is none, nothing takes the input, and no event reports it. If `seq` is not null, it gets the
+/// input's sequence number: 1 for the producer's first input, then one more for each. Events about
+/// the input carry it. Fails with `ERR_SIZE_EXCEEDED` if `len` is more than `max_input_size`.
 ///
 /// # Safety
-/// `producer` must be a live handle; `flow` must be NUL-terminated; `seq` must be null or valid
-/// for writes.
+/// `producer` must be a live handle; `seq` must be null or valid for writes.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn uriel_producer_publish_input(
     producer: *mut Producer,
     len: usize,
-    flow: *const c_char,
     seq: *mut u64,
 ) -> Status {
-    let result = unsafe { (|| handle_arg(producer)?.publish_input(len, str_arg(flow)?))() };
+    let result = unsafe { handle_arg(producer) }.and_then(|producer| producer.publish_input(len));
     Status::from(result.map(|id| {
         if !seq.is_null() {
             unsafe { seq.write(id.seq()) };
@@ -436,14 +433,39 @@ pub unsafe extern "C" fn uriel_client_destroy(client: *mut Client) -> Status {
 /// `uriel_producer_create`. The producer may be created before or after this call. A producer's
 /// inputs go to one client only.
 ///
+/// If `subscription` is not NULL, it gets a subscription to the events about the producer's
+/// inputs, the same as `uriel_subscribe_producer`. It exists before the client takes the first
+/// input, so it misses no event. It is created on the calling thread, and must be used and
+/// destroyed there; to read the events on another thread, call this function on that thread. Pass
+/// NULL if the app does not read the events.
+///
 /// # Safety
-/// `client` must be a live handle; `name` must be NUL-terminated.
+/// `client` must be a live handle; `name` must be NUL-terminated; `subscription` must be null or
+/// valid for writes.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn uriel_client_add_producer(
     client: *mut Client,
     name: *const c_char,
+    subscription: *mut *mut Subscription,
 ) -> Status {
-    Status::from(unsafe { (|| handle_arg(client)?.add_producer(str_arg(name)?))() })
+    let result = unsafe {
+        (|| -> Result<()> {
+            let client = handle_arg(client)?;
+            let name = str_arg(name)?;
+            let events = if subscription.is_null() {
+                None
+            } else {
+                Some(Subscription::producer(name)?)
+            };
+            client.add_producer(name)?;
+            if let Some(events) = events {
+                // SAFETY: `subscription` is non-null and writable per the caller's contract.
+                *subscription = Box::into_raw(Box::new(events));
+            }
+            Ok(())
+        })()
+    };
+    Status::from(result)
 }
 
 /// Stops taking inputs from the producer `name`. Fails while a flow uses it.
@@ -459,9 +481,10 @@ pub unsafe extern "C" fn uriel_client_remove_producer(
 }
 
 /// Adds the flow `name`: installs its engines on the servers, and routes the inputs that its
-/// producers publish on `name` (`uriel_producer_publish_input`).
+/// producers publish (`uriel_producer_publish_input`). A producer listed by several flows sends
+/// each input through all of them.
 ///
-/// - `name`: unique among this client's flows. Producers publish on it.
+/// - `name`: unique among this client's flows. Events about its inputs carry it.
 /// - `spec`: the flow in TOML. It lists the producers, which the client must take already
 ///   (`uriel_client_add_producer`); the engines, by the names their servers serve them under,
 ///   each with `location = "local"` or `"remote"`; and the edges from a producer or an engine to
@@ -1194,8 +1217,6 @@ pub unsafe extern "C" fn uriel_subscription_poll(
 #[repr(C)]
 pub struct ReadInputView {
     id: InputIdView,
-    /// The flow the producer published the input on.
-    flow: *const c_char,
     /// How to read `buf`; "" if the input has no convention.
     payload_type: *const c_char,
     buf: *const u8,
@@ -1213,7 +1234,6 @@ impl ReadInputView {
                 session: input.id().session(),
                 seq: input.id().seq(),
             },
-            flow: input.envelope.flow.as_c_str(),
             payload_type: input.envelope.payload_type.as_c_str(),
             buf: input.data().as_ptr(),
             len: input.data().len(),
@@ -1299,7 +1319,7 @@ mod tests {
 
         let handle = unsafe { &mut *producer };
         handle.new_input().unwrap();
-        let id = handle.publish_input(0, "flow").unwrap();
+        let id = handle.publish_input(0).unwrap();
         assert_eq!(id.session(), session);
         assert_eq!(unsafe { uriel_producer_destroy(producer) }, Status::Ok);
     }
@@ -1417,6 +1437,69 @@ mod tests {
     }
 
     #[test]
+    fn add_producer_gives_a_subscription_if_asked() {
+        let client_name = CString::new(unique("client")).unwrap();
+        let server_name = CString::new(unique("server")).unwrap();
+        let mut client = ptr::null_mut();
+        let created = unsafe {
+            uriel_client_create(
+                client_name.as_ptr(),
+                server_name.as_ptr(),
+                ptr::null(),
+                &mut client,
+            )
+        };
+        assert_eq!(created, Status::Ok);
+        let producer_name = CString::new(unique("camera")).unwrap();
+        let other_name = CString::new(unique("camera")).unwrap();
+        let mut subscription = ptr::null_mut();
+
+        let with =
+            unsafe { uriel_client_add_producer(client, producer_name.as_ptr(), &mut subscription) };
+        let without =
+            unsafe { uriel_client_add_producer(client, other_name.as_ptr(), ptr::null_mut()) };
+
+        assert_eq!((with, without), (Status::Ok, Status::Ok));
+        assert!(!subscription.is_null());
+        let mut event = std::mem::MaybeUninit::<EventView>::uninit();
+        assert_eq!(
+            unsafe { uriel_subscription_poll(subscription, event.as_mut_ptr()) },
+            Status::ErrAgain
+        );
+        assert_eq!(
+            unsafe { uriel_subscription_destroy(subscription) },
+            Status::Ok
+        );
+        assert_eq!(unsafe { uriel_client_destroy(client) }, Status::Ok);
+    }
+
+    #[test]
+    fn failed_add_producer_gives_no_subscription() {
+        let client_name = CString::new(unique("client")).unwrap();
+        let server_name = CString::new(unique("server")).unwrap();
+        let mut client = ptr::null_mut();
+        unsafe {
+            uriel_client_create(
+                client_name.as_ptr(),
+                server_name.as_ptr(),
+                ptr::null(),
+                &mut client,
+            )
+        };
+        let name = CString::new(unique("camera")).unwrap();
+        let mut first = ptr::null_mut();
+        unsafe { uriel_client_add_producer(client, name.as_ptr(), &mut first) };
+        let mut second = ptr::null_mut();
+
+        let again = unsafe { uriel_client_add_producer(client, name.as_ptr(), &mut second) };
+
+        assert_eq!(again, Status::ErrInvalid);
+        assert!(second.is_null());
+        unsafe { uriel_subscription_destroy(first) };
+        unsafe { uriel_client_destroy(client) };
+    }
+
+    #[test]
     fn abi_version_matches_the_header() {
         assert_eq!(uriel_abi_version(), ABI_VERSION);
     }
@@ -1453,7 +1536,7 @@ mod tests {
         let mut producer = Producer::new(name.to_str().unwrap(), None, 8).unwrap();
         let buf = producer.new_input().unwrap();
         buf[0].write(42);
-        let id = producer.publish_input(1, "flow").unwrap();
+        let id = producer.publish_input(1).unwrap();
         assert_eq!(unsafe { uriel_reader_wait(reader, 200) }, Status::Ok);
         let polled = unsafe { uriel_reader_poll(reader, input.as_mut_ptr()) };
 
@@ -1464,7 +1547,6 @@ mod tests {
             name.as_c_str()
         );
         assert_eq!((input.id.session, input.id.seq), (id.session(), id.seq()));
-        assert_eq!(unsafe { CStr::from_ptr(input.flow) }, c"flow");
         assert_eq!(
             unsafe { std::slice::from_raw_parts(input.buf, input.len) },
             [42]

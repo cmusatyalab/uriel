@@ -40,8 +40,6 @@ class ReadInput:
     """An input a `Reader` read, as its producer published it."""
 
     id: InputId
-    flow: str
-    """The flow the producer published the input on."""
     payload_type: str
     """How to read `data`; empty if the input has no convention."""
     data: memoryview

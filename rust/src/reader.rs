@@ -50,11 +50,6 @@ impl ReadInput<'_> {
         &self.id
     }
 
-    /// The flow the producer published the input on.
-    pub fn flow(&self) -> &str {
-        self.envelope.flow.as_str()
-    }
-
     /// How to read [`ReadInput::data`]; empty if the input has no convention.
     pub fn payload_type(&self) -> &str {
         self.envelope.payload_type.as_str()
@@ -185,7 +180,7 @@ mod tests {
     use super::*;
     use crate::{
         Producer,
-        test_util::{FLOW, INPUT_LEN, MAX_INPUT_SIZE, TIMEOUT, publish, unique},
+        test_util::{INPUT_LEN, MAX_INPUT_SIZE, TIMEOUT, publish, unique},
     };
 
     /// A producer, and a reader of its inputs.
@@ -205,7 +200,6 @@ mod tests {
         let input = reader.poll().unwrap();
 
         assert_eq!(input.id(), &id);
-        assert_eq!(input.flow(), FLOW);
         assert_eq!(input.payload_type(), "image/jpeg");
         assert_eq!(input.data(), [7; INPUT_LEN]);
         assert_eq!(input.lost(), 0);

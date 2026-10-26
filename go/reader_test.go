@@ -18,7 +18,7 @@ func TestReaderAndEngineBothGetTheInput(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	seq, err := f.producer.Send(flowName, []byte("frame"))
+	seq, err := f.producer.Send([]byte("frame"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestReaderAndEngineBothGetTheInput(t *testing.T) {
 	if input.ID != want {
 		t.Errorf("reader got input %+v, want %+v", input.ID, want)
 	}
-	if string(input.Data) != "frame" || input.Flow != flowName || input.PayloadType != inputType {
+	if string(input.Data) != "frame" || input.PayloadType != inputType {
 		t.Errorf("reader got %+v, want %q of type %q on %q", input, "frame", inputType, flowName)
 	}
 	if input.Lost != 0 {
@@ -56,7 +56,7 @@ func TestReaderReadsInputsInOrder(t *testing.T) {
 	defer producer.Close()
 
 	for _, data := range []string{"one", "two"} {
-		if _, err := producer.Send(flowName, []byte(data)); err != nil {
+		if _, err := producer.Send([]byte(data)); err != nil {
 			t.Fatal(err)
 		}
 	}

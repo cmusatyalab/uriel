@@ -13,8 +13,6 @@ import (
 // ReadInput is an input a [Reader] read, as its producer published it.
 type ReadInput struct {
 	ID InputID
-	// Flow is the flow the producer published the input on.
-	Flow string
 	// PayloadType says how to read Data; empty if the input has no convention.
 	PayloadType string
 	// Data is the input's bytes, in shared memory. It stays valid until the next poll; copy it to
@@ -80,7 +78,6 @@ func (r *Reader) Poll() (ReadInput, error) {
 	}
 	return ReadInput{
 		ID:          inputID(view.id),
-		Flow:        C.GoString(view.flow),
 		PayloadType: C.GoString(view.payload_type),
 		Data:        unsafe.Slice((*byte)(unsafe.Pointer(view.buf)), int(view.len)),
 		Lost:        uint64(view.lost),

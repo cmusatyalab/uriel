@@ -2,8 +2,9 @@
 
 from dataclasses import dataclass
 
-from uriel._ffi import LockedHandle, bytes_arg, check, create, cstr, lib, options
+from uriel._ffi import LockedHandle, bytes_arg, check, create, cstr, ffi, lib, options
 from uriel.errors import InvalidArgumentError
+from uriel.subscription import Subscription
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,7 +54,16 @@ class Client(LockedHandle):
 
     def add_producer(self, name: str) -> None:
         """Takes the inputs of the producer `name`."""
-        self._call(lib.uriel_client_add_producer, cstr(name))
+        self._call(lib.uriel_client_add_producer, cstr(name), ffi.NULL)
+
+    def add_producer_with_events(self, name: str) -> Subscription:
+        """Takes the inputs of the producer `name`, and returns a subscription to the events about
+        them, the same as `Subscription.producer`. It exists before the client takes the first
+        input, so it misses no event. It belongs to the calling thread: to read the events on
+        another thread, call this on that thread."""
+        out = ffi.new("uriel_subscription_t **")
+        self._call(lib.uriel_client_add_producer, cstr(name), out)
+        return Subscription(out[0])
 
     def remove_producer(self, name: str) -> None:
         """Stops taking the inputs of the producer `name`. It fails while a flow uses it."""

@@ -1,6 +1,6 @@
 //! Producer: publishes inputs into shared memory for engines to consume.
 
-use crate::envelope::{Envelope, MAX_FLOW_NAME};
+use crate::envelope::Envelope;
 use crate::ipc::types::{PayloadType, payload_type};
 use crate::routing::ids::{InputId, ProducerName};
 use crate::{Error, Result, services};
@@ -8,13 +8,12 @@ use iceoryx2::port::notifier::Notifier;
 use iceoryx2::port::publisher::Publisher;
 use iceoryx2::prelude::*;
 use iceoryx2::sample_mut_uninit::SampleMutUninit;
-use iceoryx2_bb_container::string::StaticString;
 use std::fmt;
 use std::mem::MaybeUninit;
 use uuid::Uuid;
 
 /// Publishes inputs. Each input is written in place into a loaned shared memory buffer, and then
-/// published on a flow.
+/// published.
 pub struct Producer {
     name: ProducerName,
     /// Chosen randomly when the producer starts, so input ids never repeat across restarts.
@@ -85,17 +84,17 @@ impl Producer {
         self.session
     }
 
-    /// Publishes the first `len` bytes of the loaned buffer on `flow`, and returns the input's id,
-    /// which the events about the input carry.
-    pub fn publish_input(&mut self, len: usize, flow: &str) -> Result<InputId> {
+    /// Publishes the first `len` bytes of the loaned buffer, and returns the input's id, which the
+    /// events about the input carry. The client that takes the producer's inputs sends it through
+    /// every flow that lists the producer; if it has none, nothing takes the input, and no event
+    /// reports it.
+    pub fn publish_input(&mut self, len: usize) -> Result<InputId> {
         if len > self.max_input_size {
             return Err(Error::SizeExceeded {
                 size: len,
                 max: self.max_input_size,
             });
         }
-        let flow = StaticString::<MAX_FLOW_NAME>::try_from(flow)
-            .map_err(|e| Error::InvalidArgument(format!("invalid flow name {flow:?}: {e}")))?;
 
         let mut sample = self.pending.take().ok_or_else(|| {
             Error::InvalidArgument(String::from("no pending input; call new_input first"))
@@ -109,7 +108,6 @@ impl Producer {
             session: id.session,
             seq: id.seq,
             len: len as u64,
-            flow,
             payload_type: self.input_type,
         };
         self.next_seq += 1;

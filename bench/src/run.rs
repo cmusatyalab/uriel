@@ -100,7 +100,6 @@ pub fn run(spec: &RunSpec) -> Result<Recorded> {
         recorders.push(start_recorder(name, &stop)?);
         producers.push(start_producer(
             name,
-            &spec.name,
             load,
             spec.duration,
             seeds.random(),
@@ -263,17 +262,16 @@ fn remote_config(spec: &RunSpec, remote: Option<&Server>) -> Result<Option<Remot
     }))
 }
 
-/// Starts the producer `name`, which publishes on `flow` from the start of the run for
-/// `duration`, and returns when it published each input.
+/// Starts the producer `name`, which publishes from the start of the run for `duration`, and
+/// returns when it published each input.
 fn start_producer(
     name: &str,
-    flow: &str,
     load: &ProducerLoad,
     duration: Duration,
     seed: u64,
     start: &Arc<Barrier>,
 ) -> Result<JoinHandle<Result<Vec<InputRow>>>> {
-    let (producer_name, flow, start) = (name.to_owned(), flow.to_owned(), Arc::clone(start));
+    let (producer_name, start) = (name.to_owned(), Arc::clone(start));
     let gaps = load.gaps()?;
     let payloads = load.payloads()?;
     let max_input_size = payloads.iter().map(Vec::len).max().unwrap_or_default();
@@ -302,7 +300,7 @@ fn start_producer(
                 thread::sleep(due.saturating_duration_since(Instant::now()));
                 producer.new_input()?[..payload.len()].write_copy_of_slice(payload);
                 let published_at = Timestamp::now();
-                let id = producer.publish_input(payload.len(), &flow)?;
+                let id = producer.publish_input(payload.len())?;
                 inputs.push(InputRow::new(&id, published_at));
                 due += gaps.sample(&mut rng);
             }

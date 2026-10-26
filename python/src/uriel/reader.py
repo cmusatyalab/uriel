@@ -58,7 +58,6 @@ class Reader(ThreadHandle):
             return None
         self._input = ReadInput(
             id=InputId._from_c(out.id),
-            flow=ffi.string(out.flow).decode(),
             payload_type=ffi.string(out.payload_type).decode(),
             data=view(out.buf, out.len, writable=False),
             lost=out.lost,

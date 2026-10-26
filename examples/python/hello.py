@@ -45,7 +45,7 @@ with (
         client.add_flow("hello", FLOW)
 
         # 4. The app sends an input.
-        producer.send("hello", b"hello, uriel")
+        producer.send(b"hello, uriel")
 
         # 5. The engine gets it, and reports its result.
         input = engine.next(WAIT)

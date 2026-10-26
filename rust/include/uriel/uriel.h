@@ -31,7 +31,7 @@
 /**
  * The version of the ABI that this library implements.
  */
-#define URIEL_ABI_VERSION 2
+#define URIEL_ABI_VERSION 3
 
 /**
  * Maximum length of a flow name, in bytes, not counting the terminating NUL.
@@ -190,7 +190,7 @@ typedef struct uriel_engine_t uriel_engine_t;
 
 /**
  * Publishes inputs. Each input is written in place into a loaned shared memory buffer, and then
- * published on a flow.
+ * published.
  */
 typedef struct uriel_producer_t uriel_producer_t;
 
@@ -300,10 +300,6 @@ typedef struct {
 typedef struct {
   uriel_input_id_t id;
   /**
-   * The flow the producer published the input on.
-   */
-  const char *flow;
-  /**
    * How to read `buf`; "" if the input has no convention.
    */
   const char *payload_type;
@@ -395,21 +391,16 @@ uriel_status_t uriel_producer_destroy(uriel_producer_t *producer);
 uriel_status_t uriel_producer_new_input(uriel_producer_t *producer, uint8_t **buf);
 
 /**
- * Publishes the first `len` bytes of the loaned buffer on the flow `flow`: the name a client
- * added the flow with (`uriel_client_add_flow`). If no client has a flow of that name that lists
- * this producer, nothing takes the input, and no event reports it. If `seq` is not null, it gets
- * the input's sequence number: 1 for the producer's first input, then one more for each. Events
- * about the input carry it. Fails with `ERR_SIZE_EXCEEDED` if `len` is more than
- * `max_input_size`.
+ * Publishes the first `len` bytes of the loaned buffer. The client that takes the producer's
+ * inputs sends it through every flow that lists the producer (`uriel_client_add_flow`); if there
+ * is none, nothing takes the input, and no event reports it. If `seq` is not null, it gets the
+ * input's sequence number: 1 for the producer's first input, then one more for each. Events about
+ * the input carry it. Fails with `ERR_SIZE_EXCEEDED` if `len` is more than `max_input_size`.
  *
  * # Safety
- * `producer` must be a live handle; `flow` must be NUL-terminated; `seq` must be null or valid
- * for writes.
+ * `producer` must be a live handle; `seq` must be null or valid for writes.
  */
-uriel_status_t uriel_producer_publish_input(uriel_producer_t *producer,
-                                            size_t len,
-                                            const char *flow,
-                                            uint64_t *seq);
+uriel_status_t uriel_producer_publish_input(uriel_producer_t *producer, size_t len, uint64_t *seq);
 
 /**
  * Writes the producer's session to `*session`: a random number chosen when the producer was
@@ -505,10 +496,19 @@ uriel_status_t uriel_client_destroy(uriel_client_t *client);
  * `uriel_producer_create`. The producer may be created before or after this call. A producer's
  * inputs go to one client only.
  *
+ * If `subscription` is not NULL, it gets a subscription to the events about the producer's
+ * inputs, the same as `uriel_subscribe_producer`. It exists before the client takes the first
+ * input, so it misses no event. It is created on the calling thread, and must be used and
+ * destroyed there; to read the events on another thread, call this function on that thread. Pass
+ * NULL if the app does not read the events.
+ *
  * # Safety
- * `client` must be a live handle; `name` must be NUL-terminated.
+ * `client` must be a live handle; `name` must be NUL-terminated; `subscription` must be null or
+ * valid for writes.
  */
-uriel_status_t uriel_client_add_producer(uriel_client_t *client, const char *name);
+uriel_status_t uriel_client_add_producer(uriel_client_t *client,
+                                         const char *name,
+                                         uriel_subscription_t **subscription);
 
 /**
  * Stops taking inputs from the producer `name`. Fails while a flow uses it.
@@ -520,9 +520,10 @@ uriel_status_t uriel_client_remove_producer(uriel_client_t *client, const char *
 
 /**
  * Adds the flow `name`: installs its engines on the servers, and routes the inputs that its
- * producers publish on `name` (`uriel_producer_publish_input`).
+ * producers publish (`uriel_producer_publish_input`). A producer listed by several flows sends
+ * each input through all of them.
  *
- * - `name`: unique among this client's flows. Producers publish on it.
+ * - `name`: unique among this client's flows. Events about its inputs carry it.
  * - `spec`: the flow in TOML. It lists the producers, which the client must take already
  *   (`uriel_client_add_producer`); the engines, by the names their servers serve them under,
  *   each with `location = "local"` or `"remote"`; and the edges from a producer or an engine to

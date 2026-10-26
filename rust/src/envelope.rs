@@ -1,7 +1,6 @@
 //! Payload envelope: metadata carried in each sample's iceoryx2 user header.
 
 use iceoryx2::prelude::ZeroCopySend;
-use iceoryx2_bb_container::string::StaticString;
 
 use crate::ipc::types::PayloadType;
 
@@ -17,8 +16,6 @@ pub struct Envelope {
     pub seq: u64,
     /// Number of valid bytes at the start of the payload.
     pub len: u64,
-    /// Flow the input was published on.
-    pub flow: StaticString<MAX_FLOW_NAME>,
     /// How to read the input, as its producer names it; empty if it has no convention.
     pub payload_type: PayloadType,
 }
