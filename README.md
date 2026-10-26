@@ -98,6 +98,7 @@ Install it only as a static library, as above, so programs linked with it need n
 ## Examples
 
 - `examples/go/hello` and `examples/python/hello.py`: an app sends text to an engine that upper-cases it.
+- `examples/c/hello`: the same in C, as four programs: a server, an engine, a client and a producer.
 - `examples/go/pipeline`: a camera, a motion filter and a detector in one process.
 - `examples/yolo`: object detection with YOLO, in Python.
 - `examples/h264`: engines that encode frames with H.264, and decode them.

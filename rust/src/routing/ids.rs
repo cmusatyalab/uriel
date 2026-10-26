@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 #[repr(C)]
 pub(crate) struct EdgeId(pub(crate) u32);
 
-/// Maximum length of a producer name.
+/// Maximum length of a producer name, in bytes, not counting the terminating NUL.
 pub const MAX_PRODUCER_NAME: usize = 64;
 
 /// A producer's name, with a fixed size so it can live in shared memory.

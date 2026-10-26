@@ -44,8 +44,8 @@ impl Input<'_> {
 /// An outcome being built by [`Engine::new_output`] and [`Engine::replace`].
 type Output = SampleMutUninit<ipc::Service, [MaybeUninit<u8>], OutcomeRecord>;
 
-/// Processes one input at a time and reports exactly one outcome for it: [`Engine::drop`],
-/// [`Engine::forward`], or [`Engine::replace`].
+/// Processes one input at a time, and reports exactly one outcome for it: drop, forward or
+/// replace.
 pub struct Engine {
     /// How to read this engine's results. Empty if it says nothing.
     result_type: PayloadType,

@@ -40,10 +40,15 @@ pub extern "C" fn uriel_abi_version() -> u32 {
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
+    /// The call succeeded.
     Ok = 0,
+    /// An argument was invalid, or the call is not allowed in the object's state.
     ErrInvalid,
+    /// Data was larger than the limit it was created with.
     ErrSizeExceeded,
+    /// Nothing is ready yet: no input or event to poll, or a wait timed out. Try again.
     ErrAgain,
+    /// Something failed inside Uriel, e.g. shared memory or the network.
     ErrInternal,
 }
 
@@ -196,8 +201,17 @@ pub unsafe extern "C" fn uriel_metrics_serve(addr: *const c_char) -> Status {
 
 // --- Producer ---
 
-/// Creates a producer. Use and destroy it only on the thread that created it. `input_type` names
-/// how to read the producer's inputs, e.g. a protobuf message name. It may be NULL.
+/// Creates the producer `name`, which publishes the app's inputs.
+///
+/// - `name`: unique among the producers on this machine. A client takes the producer's inputs by
+///   this name (`uriel_client_add_producer`), a flow spec lists it under `[[producers]]`, and
+///   subscriptions and readers find it by it.
+/// - `input_type`: how to read the inputs, e.g. a protobuf message name. Engines see it as each
+///   input's `payload_type`. NULL if the inputs have no such convention.
+/// - `max_input_size`: the size in bytes of the buffer that `uriel_producer_new_input` loans, and
+///   so the largest input.
+///
+/// Use and destroy the producer only on the thread that created it.
 ///
 /// # Safety
 /// String arguments must be NUL-terminated (`input_type` may be null); `producer` must be valid
@@ -216,6 +230,8 @@ pub unsafe extern "C" fn uriel_producer_create(
     }
 }
 
+/// Destroys the producer. NULL is ignored.
+///
 /// # Safety
 /// `producer` must be null or a live handle that is not used afterwards.
 #[unsafe(no_mangle)]
@@ -223,6 +239,10 @@ pub unsafe extern "C" fn uriel_producer_destroy(producer: *mut Producer) -> Stat
     unsafe { destroy_handle(producer) }
 }
 
+/// Loans a shared memory buffer of `max_input_size` bytes for the next input, and points `*buf`
+/// to it. Write the input there, then call `uriel_producer_publish_input`. Calling it again before
+/// publishing gives up the previous buffer.
+///
 /// # Safety
 /// `producer` must be a live handle; `buf` must be valid for writes.
 #[unsafe(no_mangle)]
@@ -239,8 +259,12 @@ pub unsafe extern "C" fn uriel_producer_new_input(
     Status::from(result)
 }
 
-/// Publishes the first `len` bytes of the input on `flow`. If `seq` is not null, it gets the
-/// input's sequence number, which the events about the input carry.
+/// Publishes the first `len` bytes of the loaned buffer on the flow `flow`: the name a client
+/// added the flow with (`uriel_client_add_flow`). If no client has a flow of that name that lists
+/// this producer, nothing takes the input, and no event reports it. If `seq` is not null, it gets
+/// the input's sequence number: 1 for the producer's first input, then one more for each. Events
+/// about the input carry it. Fails with `ERR_SIZE_EXCEEDED` if `len` is more than
+/// `max_input_size`.
 ///
 /// # Safety
 /// `producer` must be a live handle; `flow` must be NUL-terminated; `seq` must be null or valid
@@ -260,8 +284,9 @@ pub unsafe extern "C" fn uriel_producer_publish_input(
     }))
 }
 
-/// Writes the producer's session to `session`: chosen randomly when the producer started, and
-/// carried by the ids of its inputs.
+/// Writes the producer's session to `*session`: a random number chosen when the producer was
+/// created. Input ids carry it with the sequence number, so ids stay unique when a producer of the
+/// same name restarts and counts from 1 again.
 ///
 /// # Safety
 /// `producer` must be a live handle; `session` must be valid for writes.
@@ -296,6 +321,8 @@ pub unsafe extern "C" fn uriel_client_options_create(options: *mut *mut ClientOp
     unsafe { create_handle(options, || Ok(ClientOptions::default())) }
 }
 
+/// Destroys the options. NULL is ignored.
+///
 /// # Safety
 /// `options` must be null or a live handle that is not used afterwards.
 #[unsafe(no_mangle)]
@@ -303,9 +330,18 @@ pub unsafe extern "C" fn uriel_client_options_destroy(options: *mut ClientOption
     unsafe { destroy_handle(options) }
 }
 
-/// Connects the client to the remote server at `addr`, e.g. "192.0.2.1:4433". The client trusts
-/// only the certificate of `certificate_len` bytes at `certificate`, in DER, as
-/// `uriel_server_certificate` gives it.
+/// Makes the client also use a remote server, e.g. on a cloudlet, for the engines that a flow spec
+/// marks `location = "remote"`.
+///
+/// - `addr`: the server's IP address and port, e.g. "192.0.2.1:4433" or "[2001:db8::1]:4433". A
+///   host name is not accepted. The port is the one `uriel_server_remote_port` gives on the
+///   server.
+/// - `certificate`, `certificate_len`: the server's certificate in DER, as
+///   `uriel_server_certificate` gives it on the server, e.g. copied from the `certificate.der` file
+///   in its identity directory. The client trusts this certificate only.
+///
+/// The client connects on its own once it is created, and connects again after a loss; the
+/// server may start later.
 ///
 /// # Safety
 /// `options` must be a live handle; `addr` must be NUL-terminated; `certificate` must point to
@@ -332,9 +368,10 @@ pub unsafe extern "C" fn uriel_client_options_set_remote_server(
     Status::from(result)
 }
 
-/// Sets how many inputs each crossing to the remote server may have in flight: on the network,
-/// or waiting at the server. It must be at least 1, and needs a remote server. Without it,
-/// crossings get the default capacity.
+/// Sets how many inputs may be in flight, on the network or waiting at the server, on each edge of
+/// a flow that crosses from this machine to the remote server. It must be at least 1, and needs a
+/// remote server. The default, 3, keeps the remote engines on fresh inputs; a long round trip may
+/// need more to keep them busy.
 ///
 /// # Safety
 /// `options` must be a live handle.
@@ -349,8 +386,15 @@ pub unsafe extern "C" fn uriel_client_options_set_remote_crossing_capacity(
     Status::from(result)
 }
 
-/// Creates a client of the local server `local_server`. `options` may be NULL for the defaults;
-/// the client copies what it needs, so they may be destroyed right after.
+/// Creates the client `name`, which sends the inputs of its producers through its flows.
+///
+/// - `name`: unique among the clients on this machine.
+/// - `local_server`: the name of the server on this machine that runs the flows' local engines,
+///   as given to `uriel_server_create`, in this process or another one. It may start later.
+/// - `options`: a remote server, and more; NULL for none. The client copies what it needs, so
+///   they may be destroyed right after.
+///
+/// The client works on its own thread, and may be used from any thread.
 ///
 /// # Safety
 /// String arguments must be NUL-terminated; `options` must be null or a live handle; `client`
@@ -379,6 +423,8 @@ pub unsafe extern "C" fn uriel_client_create(
     }
 }
 
+/// Destroys the client, after removing its flows from the servers. NULL is ignored.
+///
 /// # Safety
 /// `client` must be null or a live handle that is not used afterwards.
 #[unsafe(no_mangle)]
@@ -386,6 +432,10 @@ pub unsafe extern "C" fn uriel_client_destroy(client: *mut Client) -> Status {
     unsafe { destroy_handle(client) }
 }
 
+/// Starts taking inputs from the producer `name` on this machine, as given to
+/// `uriel_producer_create`. The producer may be created before or after this call. A producer's
+/// inputs go to one client only.
+///
 /// # Safety
 /// `client` must be a live handle; `name` must be NUL-terminated.
 #[unsafe(no_mangle)]
@@ -396,6 +446,8 @@ pub unsafe extern "C" fn uriel_client_add_producer(
     Status::from(unsafe { (|| handle_arg(client)?.add_producer(str_arg(name)?))() })
 }
 
+/// Stops taking inputs from the producer `name`. Fails while a flow uses it.
+///
 /// # Safety
 /// `client` must be a live handle; `name` must be NUL-terminated.
 #[unsafe(no_mangle)]
@@ -406,8 +458,30 @@ pub unsafe extern "C" fn uriel_client_remove_producer(
     Status::from(unsafe { (|| handle_arg(client)?.remove_producer(str_arg(name)?))() })
 }
 
-/// Adds the flow `name`. `spec` describes it in TOML, as a list of edges; see the `spec` module
-/// of the Rust API for an example.
+/// Adds the flow `name`: installs its engines on the servers, and routes the inputs that its
+/// producers publish on `name` (`uriel_producer_publish_input`).
+///
+/// - `name`: unique among this client's flows. Producers publish on it.
+/// - `spec`: the flow in TOML. It lists the producers, which the client must take already
+///   (`uriel_client_add_producer`); the engines, by the names their servers serve them under,
+///   each with `location = "local"` or `"remote"`; and the edges from a producer or an engine to
+///   an engine, each with the time the engine has to answer:
+///
+/// ```toml
+/// [[producers]]
+/// name = "camera"
+///
+/// [[engines]]
+/// name = "detector"
+/// location = "local"
+///
+/// [[edges]]
+/// from = "camera"
+/// to = "detector"
+/// timeout = "300ms"
+/// ```
+///
+/// If the remote server is not connected yet, the remote part is installed once it is.
 ///
 /// # Safety
 /// `client` must be a live handle; string arguments must be NUL-terminated.
@@ -425,6 +499,8 @@ pub unsafe extern "C" fn uriel_client_add_flow(
     })
 }
 
+/// Removes the flow `name` from the client and from the servers.
+///
 /// # Safety
 /// `client` must be a live handle; `name` must be NUL-terminated.
 #[unsafe(no_mangle)]
@@ -454,6 +530,8 @@ pub unsafe extern "C" fn uriel_server_options_create(options: *mut *mut ServerOp
     unsafe { create_handle(options, || Ok(ServerOptions::default())) }
 }
 
+/// Destroys the options. NULL is ignored.
+///
 /// # Safety
 /// `options` must be null or a live handle that is not used afterwards.
 #[unsafe(no_mangle)]
@@ -461,7 +539,10 @@ pub unsafe extern "C" fn uriel_server_options_destroy(options: *mut ServerOption
     unsafe { destroy_handle(options) }
 }
 
-/// Makes the server accept remote clients on the network address `addr`, e.g. "0.0.0.0:4433".
+/// Makes the server accept remote clients, over QUIC, on the local IP address and UDP port `addr`,
+/// e.g. "0.0.0.0:4433" for every interface. Port 0 lets the system pick a free port, which
+/// `uriel_server_remote_port` then gives. Without it, the server only serves clients on its
+/// machine.
 ///
 /// # Safety
 /// `options` must be a live handle; `addr` must be NUL-terminated.
@@ -479,10 +560,11 @@ pub unsafe extern "C" fn uriel_server_options_set_bind_addr(
     Status::from(result)
 }
 
-/// Makes a server that accepts remote clients keep its certificate and key in `dir`, an existing
-/// directory, so that they stay the same across restarts; the server makes them there the first
-/// time. Without it, the server makes a new certificate each time it starts. It needs a bind
-/// address.
+/// Makes a server that accepts remote clients keep its TLS certificate and key in `dir`, an
+/// existing directory, as `certificate.der` and `key.der`. The server makes them there the first
+/// time, and reuses them after, so clients keep trusting it across restarts; give clients
+/// `certificate.der`. Without it, the server makes a new certificate each time it starts. It needs
+/// a bind address.
 ///
 /// # Safety
 /// `options` must be a live handle; `dir` must be NUL-terminated.
@@ -500,8 +582,16 @@ pub unsafe extern "C" fn uriel_server_options_set_identity_dir(
     Status::from(result)
 }
 
-/// Creates the server `name`. `options` may be NULL for the defaults; the server copies what it
-/// needs, so they may be destroyed right after.
+/// Creates the server `name`, which delivers the inputs of the flows installed on it to the engines
+/// it serves on this machine.
+///
+/// - `name`: unique among the servers on this machine. Local clients find the server by it
+///   (`local_server` in `uriel_client_create`).
+/// - `options`: a bind address for remote clients, and more; NULL for a server with local clients
+///   only. The server copies what it needs, so they may be destroyed right after.
+///
+/// The server works on its own thread, and may be used from any thread. `uriel-server` is a
+/// ready-made program that runs one.
 ///
 /// # Safety
 /// `name` must be NUL-terminated; `options` must be null or a live handle; `server` must be valid
@@ -524,6 +614,8 @@ pub unsafe extern "C" fn uriel_server_create(
     }
 }
 
+/// Destroys the server. NULL is ignored.
+///
 /// # Safety
 /// `server` must be null or a live handle that is not used afterwards.
 #[unsafe(no_mangle)]
@@ -581,6 +673,10 @@ fn not_remote() -> Error {
     Error::InvalidArgument("the server accepts no remote clients".into())
 }
 
+/// Starts serving the engine `name` on this machine, as given to `uriel_engine_create`, in this
+/// process or another one. The engine may be created before or after this call. Flows name the
+/// engine by the same name.
+///
 /// # Safety
 /// `server` must be a live handle; `name` must be NUL-terminated.
 #[unsafe(no_mangle)]
@@ -591,6 +687,8 @@ pub unsafe extern "C" fn uriel_server_add_engine(
     Status::from(unsafe { (|| handle_arg(server)?.add_engine(str_arg(name)?))() })
 }
 
+/// Stops serving the engine `name`. Fails while an installed flow uses it.
+///
 /// # Safety
 /// `server` must be a live handle; `name` must be NUL-terminated.
 #[unsafe(no_mangle)]
@@ -603,12 +701,15 @@ pub unsafe extern "C" fn uriel_server_remove_engine(
 
 // --- Engine ---
 
-/// Identifies one input of a producer. `producer` stays valid until the engine reports its
-/// outcome.
+/// Identifies one input of a producer. `producer` stays valid as long as the struct that holds
+/// this id.
 #[repr(C)]
 pub struct InputIdView {
+    /// The name of the producer that published the input.
     producer: *const c_char,
+    /// The producer's session (`uriel_producer_session`).
     session: u64,
+    /// The input's sequence number within the session, from 1.
     seq: u64,
 }
 
@@ -637,8 +738,17 @@ unsafe fn bytes_arg<'a>(ptr: *const u8, len: usize) -> Result<&'a [u8]> {
     Ok(unsafe { std::slice::from_raw_parts(ptr, len) })
 }
 
-/// Creates an engine. Use and destroy it only on the thread that created it. `result_type` names
-/// how to read this engine's results, e.g. a protobuf message name. It may be NULL.
+/// Creates the engine `name`, which processes inputs. It gets them once a server on this machine
+/// serves it (`uriel_server_add_engine`) and a flow uses it.
+///
+/// - `name`: unique among the engines on this machine. Servers, flow specs and subscriptions name
+///   the engine by it.
+/// - `result_type`: how to read the results this engine reports, e.g. a protobuf message name.
+///   Subscribers see it as each result's `payload_type`. NULL if they have no such convention.
+/// - `max_output_size`: the size in bytes of the buffer that `uriel_engine_new_output` loans. A
+///   result is at most this size, and so are a replacement input and its result together.
+///
+/// Use and destroy the engine only on the thread that created it.
 ///
 /// # Safety
 /// String arguments must be NUL-terminated (`result_type` may be null); `engine` must be valid
@@ -657,6 +767,8 @@ pub unsafe extern "C" fn uriel_engine_create(
     }
 }
 
+/// Destroys the engine. NULL is ignored.
+///
 /// # Safety
 /// `engine` must be null or a live handle that is not used afterwards.
 #[unsafe(no_mangle)]
@@ -664,9 +776,10 @@ pub unsafe extern "C" fn uriel_engine_destroy(engine: *mut Engine) -> Status {
     unsafe { destroy_handle(engine) }
 }
 
-/// Waits until an input or an event of a subscription is ready, or `timeout_ms` passes, and
-/// returns `ERR_AGAIN` then. Fetch the input with `uriel_engine_poll_input`, and the event with
-/// `uriel_engine_poll_event`; either may still return `ERR_AGAIN`.
+/// Waits until an input or an event of a subscription is ready, or `timeout_ms` milliseconds pass,
+/// and returns `ERR_AGAIN` then. A timeout of 0 checks once without waiting. Fetch the input with
+/// `uriel_engine_poll_input`, and the event with `uriel_engine_poll_event`; either may still
+/// return `ERR_AGAIN`.
 ///
 /// # Safety
 /// `engine` must be a live handle.
@@ -676,8 +789,9 @@ pub unsafe extern "C" fn uriel_engine_wait(engine: *mut Engine, timeout_ms: u32)
     Status::from(unsafe { handle_arg(engine) }.and_then(|engine| engine.wait(timeout)))
 }
 
-/// Returns `ERR_AGAIN` if no input is available. The input stays valid until the engine reports
-/// its outcome.
+/// Writes the next input to `*input`, or returns `ERR_AGAIN` if none is available. The input
+/// stays valid until the engine reports its outcome, with `uriel_engine_drop`,
+/// `uriel_engine_forward` or `uriel_engine_replace`; it must report one before polling the next.
 ///
 /// # Safety
 /// `engine` must be a live handle; `input` must be valid for writes.
@@ -708,8 +822,9 @@ pub unsafe extern "C" fn uriel_engine_poll_input(
     Status::from(result)
 }
 
-/// Subscribes the engine to the events of the engine `name`, e.g. a detector whose results it
-/// fuses. Only events published from now on are read. `uriel_engine_wait` ends for them too.
+/// Subscribes the engine to the events of the engine `name` on this machine, e.g. a detector whose
+/// results it fuses: the same events as `uriel_subscribe_engine`. Only events published from now
+/// on are read. `uriel_engine_wait` ends for them too.
 ///
 /// # Safety
 /// `engine` must be a live handle; `name` must be NUL-terminated.
@@ -723,8 +838,9 @@ pub unsafe extern "C" fn uriel_engine_subscribe(
     Status::from(result)
 }
 
-/// Returns `ERR_AGAIN` if no event of the engine's subscriptions is available. The event stays
-/// valid until the next poll. Its `engine` says which subscription it came from.
+/// Writes the next event of the engine's subscriptions to `*event`, or returns `ERR_AGAIN` if none
+/// is available. The event stays valid until the next poll. Its `engine` says which subscription
+/// it came from.
 ///
 /// # Safety
 /// `engine` must be a live handle; `event` must be valid for writes.
@@ -785,8 +901,10 @@ pub unsafe extern "C" fn uriel_engine_publish_derived(
     Status::from(published)
 }
 
-/// Drop: forward nothing; the input ends at the engine. A discard is a drop with no result
-/// (`result` null, `result_len` 0).
+/// Reports the outcome drop: the engine forwards nothing, and the input ends there. `result`, if
+/// any, reaches subscribers in the engine's `RESULT` event. A discard is a drop with no result
+/// (`result` null, `result_len` 0). Fails with `ERR_SIZE_EXCEEDED` if `result_len` is more than
+/// `max_output_size`.
 ///
 /// # Safety
 /// `engine` must be a live handle; `result` must point to `result_len` readable bytes, or be
@@ -800,10 +918,11 @@ pub unsafe extern "C" fn uriel_engine_drop(
     Status::from(unsafe { (|| handle_arg(engine)?.drop(bytes_arg(result, result_len)?))() })
 }
 
-/// Forward: forward the input unchanged along every outgoing input edge.
+/// Reports the outcome forward: the engine forwards the input unchanged along every outgoing input
+/// edge. `result` is as for `uriel_engine_drop`.
 ///
 /// # Safety
-/// As for [`uriel_engine_drop`].
+/// As for `uriel_engine_drop`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn uriel_engine_forward(
     engine: *mut Engine,
@@ -813,7 +932,8 @@ pub unsafe extern "C" fn uriel_engine_forward(
     Status::from(unsafe { (|| handle_arg(engine)?.forward(bytes_arg(result, result_len)?))() })
 }
 
-/// Loans a buffer for a new input. Fill it, then call `uriel_engine_replace`.
+/// Loans a shared memory buffer of `max_output_size` bytes for a new input, and points `*buf` to
+/// it. Fill it, then call `uriel_engine_replace`.
 ///
 /// # Safety
 /// `engine` must be a live handle; `buf` must be valid for writes.
@@ -829,12 +949,14 @@ pub unsafe extern "C" fn uriel_engine_new_output(engine: *mut Engine, buf: *mut 
     Status::from(result)
 }
 
-/// Replace: forward the first `output_len` bytes of the loaned buffer as a new input, in place
-/// of the input, along every outgoing input edge. `output_type` names how to read it; it may be
-/// NULL.
+/// Reports the outcome replace: the engine forwards the first `output_len` bytes of the buffer
+/// that `uriel_engine_new_output` loaned, as a new input in place of the input, along every
+/// outgoing input edge. `output_type` names how to read it; it may be NULL. `result` is as for
+/// `uriel_engine_drop`. Fails with `ERR_SIZE_EXCEEDED` if `output_len` and `result_len` together
+/// are more than `max_output_size`.
 ///
 /// # Safety
-/// As for [`uriel_engine_drop`]; `output_type` must be NUL-terminated or null.
+/// As for `uriel_engine_drop`; `output_type` must be NUL-terminated or null.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn uriel_engine_replace(
     engine: *mut Engine,
@@ -860,12 +982,21 @@ pub unsafe extern "C" fn uriel_engine_replace(
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventKindView {
+    /// A server received the input, and made one offer of it per engine that takes it.
     Accepted,
+    /// The offer was sent to the engine; a result may come.
     Sent,
+    /// The engine reported its outcome for the input; `outcome` says which.
     Result,
+    /// A newer input replaced the offer before it was sent, so the engine never saw it.
     Skipped,
+    /// The engine did not answer in time, or was lost.
     TimedOut,
+    /// The client lost its connection to a server of the flow `flow`. Every offer on that server
+    /// ended with it. It names no input.
     Disconnected,
+    /// A result an engine derived from the events it subscribes to
+    /// (`uriel_engine_publish_derived`). It answers no offer.
     Derived,
     /// Events were lost before the next one, because the subscriber fell behind.
     Lost,
@@ -875,8 +1006,11 @@ pub enum EventKindView {
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutcomeView {
+    /// The engine forwarded nothing.
     Drop,
+    /// The engine forwarded the input unchanged.
     Forward,
+    /// The engine forwarded a new input in place of the input.
     Replace,
 }
 
@@ -980,9 +1114,11 @@ impl EventView {
     }
 }
 
-/// Subscribes to the events about the inputs of the producer `name`: what happened to each at
-/// each engine, and lost connections. Only events published from now on are read. Use and destroy
-/// the subscription only on the thread that created it.
+/// Subscribes to the events about the inputs of the producer `name` on this machine: what happened
+/// to each at each engine of its flows, local or remote, and lost connections. This is how an app
+/// reads its results. The client that takes the producer's inputs publishes these events. Only
+/// events published from now on are read. Use and destroy the subscription only on the thread
+/// that created it.
 ///
 /// # Safety
 /// `name` must be NUL-terminated; `subscription` must be valid for writes.
@@ -994,9 +1130,10 @@ pub unsafe extern "C" fn uriel_subscribe_producer(
     unsafe { create_handle(subscription, || Subscription::producer(str_arg(name)?)) }
 }
 
-/// Subscribes to the events of the engine `name`: what happened to each input at that engine.
-/// Only events published from now on are read. Use and destroy the subscription only on the
-/// thread that created it.
+/// Subscribes to the events of the engine `name`: what happened to each input at that engine, from
+/// every flow and producer. The engine's server publishes them, or for a remote engine, the client
+/// on this machine that uses it. Only events published from now on are read. Use and destroy the
+/// subscription only on the thread that created it.
 ///
 /// # Safety
 /// `name` must be NUL-terminated; `subscription` must be valid for writes.
@@ -1008,6 +1145,8 @@ pub unsafe extern "C" fn uriel_subscribe_engine(
     unsafe { create_handle(subscription, || Subscription::engine(str_arg(name)?)) }
 }
 
+/// Destroys the subscription. NULL is ignored.
+///
 /// # Safety
 /// `subscription` must be null or a live handle that is not used afterwards.
 #[unsafe(no_mangle)]
@@ -1015,8 +1154,8 @@ pub unsafe extern "C" fn uriel_subscription_destroy(subscription: *mut Subscript
     unsafe { destroy_handle(subscription) }
 }
 
-/// Waits until an event is ready, or `timeout_ms` passes, and returns `ERR_AGAIN` then. Fetch the
-/// event with `uriel_subscription_poll`.
+/// Waits until an event is ready, or `timeout_ms` milliseconds pass, and returns `ERR_AGAIN` then.
+/// A timeout of 0 checks once without waiting. Fetch the event with `uriel_subscription_poll`.
 ///
 /// # Safety
 /// `subscription` must be a live handle.
@@ -1029,7 +1168,8 @@ pub unsafe extern "C" fn uriel_subscription_wait(
     Status::from(unsafe { handle_arg(subscription) }.and_then(|s| s.wait(timeout)))
 }
 
-/// Returns `ERR_AGAIN` if no event is available. The event stays valid until the next poll.
+/// Writes the next event to `*event`, or returns `ERR_AGAIN` if none is available. The event stays
+/// valid until the next poll.
 ///
 /// # Safety
 /// `subscription` must be a live handle; `event` must be valid for writes.
@@ -1082,8 +1222,9 @@ impl ReadInputView {
     }
 }
 
-/// Reads the inputs that the producer `name` publishes, in order, alongside the client that takes
-/// them. The producer need not exist yet. Only inputs published from now on are read. Use and
+/// Reads the inputs that the producer `name` on this machine publishes, in order, alongside the
+/// client that takes them, e.g. to record or display them. It reads every input, whatever its
+/// flow. The producer need not exist yet. Only inputs published from now on are read. Use and
 /// destroy the reader only on the thread that created it.
 ///
 /// # Safety
@@ -1096,6 +1237,8 @@ pub unsafe extern "C" fn uriel_reader_create(
     unsafe { create_handle(reader, || Reader::new(str_arg(name)?)) }
 }
 
+/// Destroys the reader. NULL is ignored.
+///
 /// # Safety
 /// `reader` must be null or a live handle that is not used afterwards.
 #[unsafe(no_mangle)]
@@ -1103,8 +1246,8 @@ pub unsafe extern "C" fn uriel_reader_destroy(reader: *mut Reader) -> Status {
     unsafe { destroy_handle(reader) }
 }
 
-/// Waits until an input is ready, or `timeout_ms` passes, and returns `ERR_AGAIN` then. Fetch the
-/// input with `uriel_reader_poll`.
+/// Waits until an input is ready, or `timeout_ms` milliseconds pass, and returns `ERR_AGAIN` then.
+/// A timeout of 0 checks once without waiting. Fetch the input with `uriel_reader_poll`.
 ///
 /// # Safety
 /// `reader` must be a live handle.
@@ -1114,7 +1257,8 @@ pub unsafe extern "C" fn uriel_reader_wait(reader: *mut Reader, timeout_ms: u32)
     Status::from(unsafe { handle_arg(reader) }.and_then(|r| r.wait(timeout)))
 }
 
-/// Returns `ERR_AGAIN` if no input is available. The input stays valid until the next poll.
+/// Writes the next input to `*input`, or returns `ERR_AGAIN` if none is available. The input stays
+/// valid until the next poll.
 ///
 /// # Safety
 /// `reader` must be a live handle; `input` must be valid for writes.

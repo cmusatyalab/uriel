@@ -16,9 +16,10 @@ use crate::{
     routing::ids::{InputId, OfferId},
 };
 
-/// Maximum length of a payload type name, e.g. a protobuf full name.
+/// Maximum length of a payload type name, e.g. a protobuf full name, in bytes, not counting the
+/// terminating NUL.
 pub const MAX_PAYLOAD_TYPE_NAME: usize = 64;
-/// Maximum length of an engine name.
+/// Maximum length of an engine name, in bytes, not counting the terminating NUL.
 pub const MAX_ENGINE_NAME: usize = 64;
 /// Maximum number of offers one event creates: one per target engine of a crossing, or one per
 /// outgoing edge after a forward or a replace.

@@ -1,0 +1,6 @@
+producer    // sensor
+flow        // end-to-end data flow path
+engine      // consumer. nodes in the data flow. consumer consumes one or more inputs from one or more flows.
+
+
+

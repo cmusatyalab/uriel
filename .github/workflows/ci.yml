@@ -58,6 +58,9 @@ jobs:
           (cd go && go vet ./... && go test ./...)
           go vet ./examples/go/...
 
+      - name: C example
+        run: make -C examples/c/hello CFLAGS="-std=c11 -O2 -Wall -Wextra -Werror"
+
       - name: Python
         working-directory: python
         run: |

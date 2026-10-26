@@ -5,7 +5,7 @@ use iceoryx2_bb_container::string::StaticString;
 
 use crate::ipc::types::PayloadType;
 
-/// Maximum length of a flow name.
+/// Maximum length of a flow name, in bytes, not counting the terminating NUL.
 pub const MAX_FLOW_NAME: usize = 64;
 
 #[derive(Debug, Default, Clone, Copy, ZeroCopySend)]

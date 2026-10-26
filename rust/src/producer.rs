@@ -13,8 +13,8 @@ use std::fmt;
 use std::mem::MaybeUninit;
 use uuid::Uuid;
 
-/// Publishes inputs. An input is written in place into a loaned shared memory buffer
-/// ([`Producer::new_input`]) and then sent ([`Producer::publish_input`]).
+/// Publishes inputs. Each input is written in place into a loaned shared memory buffer, and then
+/// published on a flow.
 pub struct Producer {
     name: ProducerName,
     /// Chosen randomly when the producer starts, so input ids never repeat across restarts.
