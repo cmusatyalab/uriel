@@ -6,6 +6,7 @@
 //! engine is served on this machine too, e.g. because the remote server runs here, and the client
 //! does not relay it.
 
+use crate::services::Svc;
 use std::collections::HashMap;
 
 use iceoryx2::prelude::*;
@@ -70,7 +71,7 @@ impl Relays {
     /// an engine opens its service.
     pub(super) fn publish(
         &mut self,
-        node: &Node<ipc::Service>,
+        node: &Node<Svc>,
         record: &EventRecord,
         result: &[u8],
     ) -> Result<()> {
@@ -99,7 +100,7 @@ impl Relays {
     /// no flow. An engine no flow uses stays relayed until the client stops.
     pub(super) fn publish_derived(
         &mut self,
-        node: &Node<ipc::Service>,
+        node: &Node<Svc>,
         record: &EventRecord,
         result: &[u8],
     ) -> Result<()> {
@@ -141,8 +142,8 @@ mod tests {
     /// Far longer than a wake-up within one process takes.
     const WAIT: Duration = Duration::from_secs(5);
 
-    fn node() -> Node<ipc::Service> {
-        NodeBuilder::new().create::<ipc::Service>().unwrap()
+    fn node() -> Node<Svc> {
+        NodeBuilder::new().create::<Svc>().unwrap()
     }
 
     fn engine(base: &str) -> EngineName {

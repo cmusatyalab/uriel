@@ -452,16 +452,12 @@ pub unsafe extern "C" fn uriel_client_add_producer(
         (|| -> Result<()> {
             let client = handle_arg(client)?;
             let name = str_arg(name)?;
-            let events = if subscription.is_null() {
-                None
-            } else {
-                Some(Subscription::producer(name)?)
-            };
-            client.add_producer(name)?;
-            if let Some(events) = events {
-                // SAFETY: `subscription` is non-null and writable per the caller's contract.
-                *subscription = Box::into_raw(Box::new(events));
+            if subscription.is_null() {
+                return client.add_producer(name);
             }
+            let events = client.add_producer_with_events(name)?;
+            // SAFETY: `subscription` is non-null and writable per the caller's contract.
+            *subscription = Box::into_raw(Box::new(events));
             Ok(())
         })()
     };

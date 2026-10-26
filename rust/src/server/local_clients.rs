@@ -7,6 +7,7 @@ use std::{
     time::Instant,
 };
 
+use crate::services::Svc;
 use iceoryx2::port::{
     listener::Listener, notifier::Notifier, publisher::Publisher, server::Server as ControlServer,
     subscriber::Subscriber,
@@ -33,15 +34,15 @@ const INITIAL_SLICE_LEN: usize = 4096;
 
 /// The stream of events to one client.
 struct EventStream {
-    events: Publisher<ipc::Service, ClientEventPayload, ClientEventHeader>,
+    events: Publisher<Svc, ClientEventPayload, ClientEventHeader>,
     /// Wakes the client after each batch of events.
-    ready: Notifier<ipc::Service>,
+    ready: Notifier<Svc>,
     /// The sequence number of the next event, so the client can tell whether it lost any.
     next_event: u64,
 }
 
 impl EventStream {
-    fn open(node: &Node<ipc::Service>, client: &str) -> Result<Self> {
+    fn open(node: &Node<Svc>, client: &str) -> Result<Self> {
         let events = services::open_client_events(node, client)?
             .publisher_builder()
             .initial_max_slice_len(INITIAL_SLICE_LEN)
@@ -88,10 +89,10 @@ impl EventStream {
 }
 
 pub(crate) struct LocalClients {
-    control: ControlServer<ipc::Service, ControlPayload, (), ControlPayload, ()>,
-    inputs: Subscriber<ipc::Service, CrossingPayload, CrossingHeader>,
+    control: ControlServer<Svc, ControlPayload, (), ControlPayload, ()>,
+    inputs: Subscriber<Svc, CrossingPayload, CrossingHeader>,
     /// Wakes the server after a client sends an input.
-    input_ready: Listener<ipc::Service>,
+    input_ready: Listener<Svc>,
     /// The event stream of each client with an installed flow.
     streams: HashMap<String, EventStream>,
     /// The client that installed each flow, by the flow's session.
@@ -102,7 +103,7 @@ pub(crate) struct LocalClients {
 
 impl LocalClients {
     /// Opens the services of the server `name`.
-    pub(crate) fn open(node: &Node<ipc::Service>, name: &str) -> Result<Self> {
+    pub(crate) fn open(node: &Node<Svc>, name: &str) -> Result<Self> {
         let control = services::open_server_control(node, name)?
             .server_builder()
             .initial_max_slice_len(INITIAL_SLICE_LEN)
@@ -244,7 +245,7 @@ impl LocalClients {
 
 impl ClientLink for LocalClients {
     /// The listener clients signal after they send an input.
-    fn ready(&self) -> &Listener<ipc::Service> {
+    fn ready(&self) -> &Listener<Svc> {
         &self.input_ready
     }
 
@@ -299,8 +300,7 @@ mod tests {
         name: String,
         dispatcher: Dispatcher,
         clients: LocalClients,
-        control:
-            iceoryx2::port::client::Client<ipc::Service, ControlPayload, (), ControlPayload, ()>,
+        control: iceoryx2::port::client::Client<Svc, ControlPayload, (), ControlPayload, ()>,
     }
 
     impl Fixture {

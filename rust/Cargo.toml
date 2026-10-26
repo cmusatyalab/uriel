@@ -13,6 +13,11 @@ crate-type = ["rlib", "cdylib", "staticlib"]
 [features]
 # Marks this as the workspace's C library for cargo-c; it enables nothing.
 capi = []
+# Keeps every service inside the process, in memory, instead of in shared memory files. The
+# producers, clients, servers, engines and subscriptions of the process then find each other, and
+# no other process does. For platforms without shared memory between apps, e.g. Android, where a
+# client talks to a remote server only.
+in-process = []
 
 [package.metadata.capi.header]
 # build.rs already writes the header, so cargo-c installs that one instead of running cbindgen.

@@ -2,6 +2,7 @@
 //! the stream of events about the client's flows. It also tells when the connection is lost: the
 //! server's process stopped, or the stream lost events.
 
+use crate::services::Svc;
 use std::{
     sync::Arc,
     thread,
@@ -46,13 +47,13 @@ pub(super) struct LocalServer {
     client: String,
     /// The server's name.
     name: String,
-    control: ControlClient<ipc::Service, ControlPayload, (), ControlPayload, ()>,
-    inputs: Publisher<ipc::Service, CrossingPayload, CrossingHeader>,
+    control: ControlClient<Svc, ControlPayload, (), ControlPayload, ()>,
+    inputs: Publisher<Svc, CrossingPayload, CrossingHeader>,
     /// Wakes the server after each input.
-    input_ready: Notifier<ipc::Service>,
-    events: Subscriber<ipc::Service, ClientEventPayload, ClientEventHeader>,
+    input_ready: Notifier<Svc>,
+    events: Subscriber<Svc, ClientEventPayload, ClientEventHeader>,
     /// Wakes the client after the server sends events.
-    events_ready: Listener<ipc::Service>,
+    events_ready: Listener<Svc>,
     /// Finds events the stream lost.
     gaps: EventGaps,
     /// The iceoryx2 configuration of the client's node, to find the server's node with.
@@ -63,7 +64,7 @@ pub(super) struct LocalServer {
 
 impl LocalServer {
     /// Connects the client `client` to the local server `name`. The server may start later.
-    pub(super) fn open(node: &Node<ipc::Service>, client: &str, name: &str) -> Result<Self> {
+    pub(super) fn open(node: &Node<Svc>, client: &str, name: &str) -> Result<Self> {
         let control = services::open_server_control(node, name)?
             .client_builder()
             .initial_max_slice_len(INITIAL_SLICE_LEN)
@@ -219,7 +220,7 @@ impl ServerLink for LocalServer {
     }
 
     /// The listener the server signals after it sends events.
-    fn ready(&self) -> &Listener<ipc::Service> {
+    fn ready(&self) -> &Listener<Svc> {
         &self.events_ready
     }
 
@@ -259,7 +260,7 @@ impl ServerLink for LocalServer {
     /// at the last check is gone: the server stopped, or stopped and started again.
     fn check(&mut self) -> Result<bool> {
         let mut running = None;
-        Node::<ipc::Service>::list(&self.config, |state| {
+        Node::<Svc>::list(&self.config, |state| {
             if let NodeState::Alive(node) = state
                 && let Some(details) = node.details().as_ref()
                 && naming::server_of_node(details.name().as_str()) == Some(self.name.as_str())

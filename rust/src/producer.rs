@@ -3,6 +3,7 @@
 use crate::envelope::Envelope;
 use crate::ipc::types::{PayloadType, payload_type};
 use crate::routing::ids::{InputId, ProducerName};
+use crate::services::Svc;
 use crate::{Error, Result, services};
 use iceoryx2::port::notifier::Notifier;
 use iceoryx2::port::publisher::Publisher;
@@ -23,10 +24,10 @@ pub struct Producer {
     /// How to read the producer's inputs; empty if they have no convention.
     input_type: PayloadType,
     max_input_size: usize,
-    node: Node<ipc::Service>,
-    publisher: Publisher<ipc::Service, [u8], Envelope>,
-    notifier: Notifier<ipc::Service>,
-    pending: Option<SampleMutUninit<ipc::Service, [MaybeUninit<u8>], Envelope>>,
+    node: Node<Svc>,
+    publisher: Publisher<Svc, [u8], Envelope>,
+    notifier: Notifier<Svc>,
+    pending: Option<SampleMutUninit<Svc, [MaybeUninit<u8>], Envelope>>,
 }
 
 impl Producer {
@@ -40,7 +41,7 @@ impl Producer {
         let node_name = NodeName::new(name).map_err(|e| Error::InvalidArgument(e.to_string()))?;
         let node = NodeBuilder::new()
             .name(&node_name)
-            .create::<ipc::Service>()
+            .create::<Svc>()
             .map_err(|e| Error::Internal(format!("failed to create node: {e}")))?;
 
         let publisher = services::open_producer_input(&node, name)?

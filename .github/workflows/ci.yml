@@ -42,6 +42,9 @@ jobs:
           cargo fmt --all --check
           cargo clippy --workspace --all-targets --locked -- -D warnings
           cargo test --workspace --locked
+          # Services in the process's memory instead of shared memory, as on Android.
+          cargo clippy -p uriel --all-targets --features in-process --locked -- -D warnings
+          cargo test -p uriel --features in-process --locked
 
       - name: Check that the C header is up to date
         # The build regenerates it from rust/src/ffi.rs.

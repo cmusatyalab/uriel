@@ -12,7 +12,7 @@ mod worker;
 
 use std::{net::SocketAddr, sync::mpsc, thread::JoinHandle};
 
-use crate::{Error, Result, client::worker::Command, services, spec::FlowSpec};
+use crate::{Error, Result, Subscription, client::worker::Command, services, spec::FlowSpec};
 
 /// How many inputs a crossing to the remote server may have in flight, unless the client is told
 /// otherwise: the least that keeps the server's pending slots fresh ("Freshness" in the design
@@ -75,6 +75,15 @@ impl Client {
             name: name.to_string(),
             reply,
         })
+    }
+
+    /// Starts taking inputs from the local producer `name`, and returns a subscription to the
+    /// events about them, the same as [`Subscription::producer`]. It exists before the client
+    /// takes the first input, so it misses no event.
+    pub fn add_producer_with_events(&mut self, name: &str) -> Result<Subscription> {
+        let events = Subscription::producer(name)?;
+        self.add_producer(name)?;
+        Ok(events)
     }
 
     /// Stops taking inputs from the producer `name`. Fails while a flow uses it.
@@ -792,6 +801,56 @@ mod tests {
         let engine = Engine::new(name, None, MAX_OUTPUT_SIZE).unwrap();
         server.add_engine(name).unwrap();
         engine
+    }
+
+    #[test]
+    fn flow_of_remote_engines_runs_without_a_local_server() {
+        const RESULT: &[u8] = &[4, 2];
+        let mut remote = Server::new(&unique("remote"), Some("127.0.0.1:0"), None).unwrap();
+        let config = RemoteServerConfig::new(
+            remote.remote_addr().unwrap(),
+            remote.certificate().unwrap().to_vec(),
+        );
+        // No server of this name runs.
+        let mut client = Client::new(&unique("client"), &unique("absent"), Some(config)).unwrap();
+        let producer_name = unique("camera");
+        let mut producer = Producer::new(&producer_name, None, MAX_INPUT_SIZE).unwrap();
+        let mut events = client
+            .add_producer_with_events(&producer_name)
+            .expect("add the producer");
+        let detector_name = unique("detector");
+        let mut detector = serve(&mut remote, &detector_name);
+        let spec = FlowSpec {
+            producers: vec![ProducerSpec {
+                name: producer_name.clone(),
+                tokens: Some(ONE_TOKEN),
+            }],
+            engines: vec![EngineSpec {
+                name: detector_name.clone(),
+                location: Location::Remote,
+            }],
+            edges: vec![EdgeSpec {
+                from: producer_name,
+                to: detector_name,
+                timeout: OFFER_TIMEOUT,
+            }],
+        };
+        client.add_flow(FLOW, &spec).unwrap();
+
+        publish(&mut producer, 7);
+        assert_eq!(next_input(&mut detector), 7);
+        detector.forward(RESULT).unwrap();
+
+        let result = (0..)
+            .map(|_| {
+                try_next(&mut events, WAIT, |event| {
+                    (event.kind(), event.result().to_vec())
+                })
+                .expect("no event arrived")
+            })
+            .find(|(kind, _)| *kind == EventKind::Result)
+            .map(|(_, result)| result);
+        assert_eq!(result.as_deref(), Some(RESULT));
     }
 
     #[test]

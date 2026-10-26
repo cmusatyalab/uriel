@@ -3,9 +3,10 @@
 //! ([`LocalServer`](super::local_server::LocalServer)); the remote server will be reached over
 //! QUIC, through the same trait.
 
+use crate::services::Svc;
 use std::sync::Arc;
 
-use iceoryx2::{port::listener::Listener, prelude::*};
+use iceoryx2::port::listener::Listener;
 
 use crate::{
     Result,
@@ -61,7 +62,7 @@ pub(super) trait ServerLink {
     fn send_skipped(&self, flow: u64, offer: OfferId, id: InputId) -> Result<()>;
 
     /// The listener that wakes the client thread when the server sent something.
-    fn ready(&self) -> &Listener<ipc::Service>;
+    fn ready(&self) -> &Listener<Svc>;
 
     /// Returns what the server sent since the last call.
     fn take_events(&mut self) -> Result<Received>;

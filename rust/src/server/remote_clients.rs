@@ -5,6 +5,7 @@
 //! A flow belongs to the connection that installed it. When the connection is lost, the server
 //! removes its flows; the client installs them again when it reconnects.
 
+use crate::services::Svc;
 use std::{collections::HashMap, net::SocketAddr, sync::mpsc, thread::JoinHandle, time::Instant};
 
 use bytes::Bytes;
@@ -76,7 +77,7 @@ pub(crate) struct RemoteClients {
     certificate: Vec<u8>,
     updates: mpsc::Receiver<Update>,
     /// Wakes the server thread after each update.
-    ready: Listener<ipc::Service>,
+    ready: Listener<Svc>,
     peers: HashMap<ConnectionId, Peer>,
     /// The connection that installed each flow, by the flow's session.
     owners: HashMap<u64, ConnectionId>,
@@ -86,7 +87,7 @@ pub(crate) struct RemoteClients {
 impl RemoteClients {
     /// Accepts remote clients of the server `name` on `addr`, presenting `identity`.
     pub(crate) fn open(
-        node: &Node<ipc::Service>,
+        node: &Node<Svc>,
         name: &str,
         addr: SocketAddr,
         identity: Identity,
@@ -208,7 +209,7 @@ impl RemoteClients {
 
 impl ClientLink for RemoteClients {
     /// The listener the network thread signals after each update.
-    fn ready(&self) -> &Listener<ipc::Service> {
+    fn ready(&self) -> &Listener<Svc> {
         &self.ready
     }
 

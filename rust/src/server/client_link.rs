@@ -3,9 +3,10 @@
 //! ([`LocalClients`](super::local_clients::LocalClients)); remote clients will be reached over
 //! QUIC, through the same trait.
 
+use crate::services::Svc;
 use std::time::Instant;
 
-use iceoryx2::{port::listener::Listener, prelude::*};
+use iceoryx2::port::listener::Listener;
 
 use crate::{
     Result,
@@ -15,7 +16,7 @@ use crate::{
 /// The server's connections to one kind of client.
 pub(crate) trait ClientLink {
     /// The listener that wakes the server thread when a client sent a call or an input.
-    fn ready(&self) -> &Listener<ipc::Service>;
+    fn ready(&self) -> &Listener<Svc>;
 
     /// Answers every waiting control call, then passes every input the clients sent to the
     /// dispatcher, and every offer they skipped on a crossing. Returns the first error, after

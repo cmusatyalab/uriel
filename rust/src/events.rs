@@ -2,6 +2,7 @@
 //! producers and for the remote engines it relays ("Event services and subscriptions" in the
 //! design note). [`Subscription`](crate::Subscription) is the reading end.
 
+use crate::services::Svc;
 use iceoryx2::{
     port::{notifier::Notifier, publisher::Publisher, publisher::PublisherCreateError},
     prelude::*,
@@ -21,8 +22,8 @@ const INITIAL_SLICE_LEN: usize = 4096;
 /// each batch.
 #[derive(Debug)]
 pub(crate) struct EventPublisher {
-    events: Publisher<ipc::Service, EventPayload, EventRecord>,
-    ready: Notifier<ipc::Service>,
+    events: Publisher<Svc, EventPayload, EventRecord>,
+    ready: Notifier<Svc>,
     /// The sequence number of the next event.
     next_seq: u64,
     /// Whether events were published since the subscribers were last woken.
@@ -32,7 +33,7 @@ pub(crate) struct EventPublisher {
 impl EventPublisher {
     /// Publishes the events of the engine `name`. Fails if another process publishes them, e.g.
     /// the server of a local engine with the same name as a remote one.
-    pub(crate) fn engine(node: &Node<ipc::Service>, name: &str) -> Result<Self> {
+    pub(crate) fn engine(node: &Node<Svc>, name: &str) -> Result<Self> {
         Self::open(
             &services::open_engine_events(node, name)?,
             &services::open_engine_events_ready(node, name)?,
@@ -46,7 +47,7 @@ impl EventPublisher {
     }
 
     /// Publishes the events about the inputs of the producer `name`, for its app.
-    pub(crate) fn producer(node: &Node<ipc::Service>, name: &str) -> Result<Self> {
+    pub(crate) fn producer(node: &Node<Svc>, name: &str) -> Result<Self> {
         Self::open(
             &services::open_producer_results(node, name)?,
             &services::open_producer_results_ready(node, name)?,
@@ -54,8 +55,8 @@ impl EventPublisher {
     }
 
     fn open(
-        events: &publish_subscribe::PortFactory<ipc::Service, EventPayload, EventRecord>,
-        ready: &event::PortFactory<ipc::Service>,
+        events: &publish_subscribe::PortFactory<Svc, EventPayload, EventRecord>,
+        ready: &event::PortFactory<Svc>,
     ) -> Result<Self> {
         let events = events
             .publisher_builder()
@@ -115,7 +116,7 @@ mod tests {
 
     #[test]
     fn an_engines_events_have_one_publisher() {
-        let node = NodeBuilder::new().create::<ipc::Service>().unwrap();
+        let node = NodeBuilder::new().create::<Svc>().unwrap();
         let name = unique("detector");
         let _first = EventPublisher::engine(&node, &name).unwrap();
 

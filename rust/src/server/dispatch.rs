@@ -6,6 +6,7 @@
 //! carry them, iceoryx2 to local clients ([`LocalClients`](super::local_clients::LocalClients))
 //! and QUIC to remote clients, sit on top.
 
+use crate::services::Svc;
 use std::{
     collections::{HashMap, VecDeque},
     sync::Arc,
@@ -73,13 +74,13 @@ fn bytes_of(data: Option<&Data>) -> &[u8] {
 
 /// The server's ends of one engine's services.
 struct EnginePorts {
-    inputs: Publisher<ipc::Service, [u8], InputHeader>,
+    inputs: Publisher<Svc, [u8], InputHeader>,
     /// Wakes the engine after each delivered input.
-    input_ready: Notifier<ipc::Service>,
-    outcomes: Subscriber<ipc::Service, [u8], OutcomeRecord>,
+    input_ready: Notifier<Svc>,
+    outcomes: Subscriber<Svc, [u8], OutcomeRecord>,
     /// Wakes the server after each outcome and derived result.
-    outcome_ready: Listener<ipc::Service>,
-    derived: Subscriber<ipc::Service, [u8], DerivedRecord>,
+    outcome_ready: Listener<Svc>,
+    derived: Subscriber<Svc, [u8], DerivedRecord>,
     events: EventPublisher,
     /// The node of the engine's running process, as of the last check. A different node, or
     /// none, means that process stopped.
@@ -87,7 +88,7 @@ struct EnginePorts {
 }
 
 impl EnginePorts {
-    fn open(node: &Node<ipc::Service>, name: &str) -> Result<Self> {
+    fn open(node: &Node<Svc>, name: &str) -> Result<Self> {
         let inputs = services::open_engine_input(node, name)?
             .publisher_builder()
             .initial_max_slice_len(INITIAL_SLICE_LEN)
@@ -163,7 +164,7 @@ impl EnginePorts {
 
 /// Connects the server router to the engines on this machine.
 pub(crate) struct Dispatcher {
-    node: Node<ipc::Service>,
+    node: Node<Svc>,
     router: ServerRouter<Data>,
     engines: HashMap<EngineName, EnginePorts>,
     /// Events for clients, until their transports send them.
@@ -175,7 +176,7 @@ impl Dispatcher {
     pub(crate) fn new(name: &str) -> Result<Self> {
         let node = NodeBuilder::new()
             .name(&naming::server_node(name)?)
-            .create::<ipc::Service>()
+            .create::<Svc>()
             .map_err(|e| Error::Internal(format!("failed to create node: {e}")))?;
         // A random first session keeps offer ids from before a restart apart from new ones.
         let (first_session, _) = Uuid::new_v4().as_u64_pair();
@@ -262,7 +263,7 @@ impl Dispatcher {
     }
 
     /// The iceoryx2 node of the server, for the services of its clients.
-    pub(crate) fn node(&self) -> &Node<ipc::Service> {
+    pub(crate) fn node(&self) -> &Node<Svc> {
         &self.node
     }
 
@@ -271,7 +272,7 @@ impl Dispatcher {
     /// `others` by their owners.
     pub(crate) fn wait<'a>(
         &'a self,
-        others: impl IntoIterator<Item = &'a Listener<ipc::Service>>,
+        others: impl IntoIterator<Item = &'a Listener<Svc>>,
         timeout: Duration,
     ) -> Result<()> {
         let outcome_ready = self.engines.values().map(|ports| &ports.outcome_ready);
@@ -299,7 +300,7 @@ impl Dispatcher {
         };
         let mut running = HashMap::new();
         let mut first_error = None;
-        Node::<ipc::Service>::list(self.node.config(), |state| {
+        Node::<Svc>::list(self.node.config(), |state| {
             match state {
                 NodeState::Alive(node) => {
                     if let Some(engine) = served(&node) {
@@ -642,7 +643,7 @@ mod tests {
     fn engine_events_are_numbered_in_order() {
         let now = Instant::now();
         let mut fixture = Fixture::new();
-        let node = NodeBuilder::new().create::<ipc::Service>().unwrap();
+        let node = NodeBuilder::new().create::<Svc>().unwrap();
         let subscriber = services::open_engine_events(&node, &fixture.name)
             .unwrap()
             .subscriber_builder()
@@ -802,7 +803,7 @@ mod tests {
         fixture.engine.poll_input().unwrap();
         fixture.engine.drop(&[]).unwrap();
 
-        let node = NodeBuilder::new().create::<ipc::Service>().unwrap();
+        let node = NodeBuilder::new().create::<Svc>().unwrap();
         let other = services::open_server_input_ready(&node, &unique("server"))
             .unwrap()
             .listener_builder()

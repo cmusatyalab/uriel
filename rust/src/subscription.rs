@@ -6,6 +6,7 @@
 //! Each event says when it happened, and for an engine's offer, when the offer was made. With the
 //! time the app published the input, these tell how long the input waited, and where.
 
+use crate::services::Svc;
 use std::time::Duration;
 
 use iceoryx2::port::{listener::Listener, subscriber::Subscriber};
@@ -20,15 +21,15 @@ use crate::{
     services::{self, EventPayload},
 };
 
-type EventSample = Sample<ipc::Service, EventPayload, EventRecord>;
+type EventSample = Sample<Svc, EventPayload, EventRecord>;
 
 /// Reads the events of one event service.
 pub struct Subscription {
     #[allow(dead_code)] // keeps the ports alive
-    node: Node<ipc::Service>,
-    events: Subscriber<ipc::Service, EventPayload, EventRecord>,
+    node: Node<Svc>,
+    events: Subscriber<Svc, EventPayload, EventRecord>,
     /// Signalled by the publisher after each batch of events.
-    ready: Listener<ipc::Service>,
+    ready: Listener<Svc>,
     /// The engine subscribed to; `None` for a producer's results.
     engine: Option<EngineName>,
     gaps: EventGaps,
@@ -155,9 +156,9 @@ impl Subscription {
     }
 
     fn open(
-        node: Node<ipc::Service>,
-        events: &publish_subscribe::PortFactory<ipc::Service, EventPayload, EventRecord>,
-        ready: &event::PortFactory<ipc::Service>,
+        node: Node<Svc>,
+        events: &publish_subscribe::PortFactory<Svc, EventPayload, EventRecord>,
+        ready: &event::PortFactory<Svc>,
         engine: Option<EngineName>,
     ) -> Result<Self> {
         let events = events
@@ -198,7 +199,7 @@ impl Subscription {
     }
 
     /// The listener the publisher signals after each batch of events.
-    pub(crate) fn ready(&self) -> &Listener<ipc::Service> {
+    pub(crate) fn ready(&self) -> &Listener<Svc> {
         &self.ready
     }
 
@@ -251,9 +252,9 @@ impl Subscription {
     }
 }
 
-fn create_node() -> Result<Node<ipc::Service>> {
+fn create_node() -> Result<Node<Svc>> {
     NodeBuilder::new()
-        .create::<ipc::Service>()
+        .create::<Svc>()
         .map_err(|e| Error::Internal(format!("failed to create node: {e}")))
 }
 
@@ -283,8 +284,8 @@ mod tests {
     /// A subscription, and the publisher's end of its service.
     struct Fixture {
         subscription: Subscription,
-        events: Publisher<ipc::Service, EventPayload, EventRecord>,
-        ready: Notifier<ipc::Service>,
+        events: Publisher<Svc, EventPayload, EventRecord>,
+        ready: Notifier<Svc>,
     }
 
     impl Fixture {
@@ -307,8 +308,8 @@ mod tests {
 
         fn publishing(
             subscription: Subscription,
-            events: &publish_subscribe::PortFactory<ipc::Service, EventPayload, EventRecord>,
-            ready: &event::PortFactory<ipc::Service>,
+            events: &publish_subscribe::PortFactory<Svc, EventPayload, EventRecord>,
+            ready: &event::PortFactory<Svc>,
         ) -> Self {
             let events = events
                 .publisher_builder()

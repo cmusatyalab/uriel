@@ -16,6 +16,7 @@ use std::{
     time::Duration,
 };
 
+use crate::services::Svc;
 use iceoryx2::{port::notifier::Notifier, prelude::*};
 use quinn::{
     ClientConfig, IdleTimeout, ServerConfig, TransportConfig, rustls,
@@ -186,7 +187,7 @@ pub(crate) fn error(what: &str, e: impl std::fmt::Display) -> Error {
 }
 
 /// Wakes the thread that reads what the network thread received.
-pub(crate) struct Waker(Notifier<ipc::Service>);
+pub(crate) struct Waker(Notifier<Svc>);
 
 impl Waker {
     pub(crate) fn wake(&self) {
@@ -220,7 +221,7 @@ where
             let started = runtime.and_then(|runtime| {
                 let _entered = runtime.enter();
                 let node = NodeBuilder::new()
-                    .create::<ipc::Service>()
+                    .create::<Svc>()
                     .map_err(|e| error("failed to create node", e))?;
                 let notifier = services::open_remote_ready(&node, &ready)?
                     .notifier_builder()

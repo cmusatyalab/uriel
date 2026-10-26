@@ -21,6 +21,7 @@
 //!
 //! Failures the thread carries on after are logged as warnings, with [`tracing`].
 
+use crate::services::Svc;
 use std::{
     collections::{HashMap, HashSet},
     sync::{
@@ -197,7 +198,7 @@ impl Drop for FlowMetrics {
 }
 
 struct Worker {
-    node: Node<ipc::Service>,
+    node: Node<Svc>,
     producers: Producers,
     relays: Relays,
     servers: HashMap<Location, Box<dyn ServerLink>>,
@@ -260,7 +261,7 @@ impl Worker {
     fn new(name: &str, local_server: &str, remote: Option<RemoteServerConfig>) -> Result<Self> {
         let node = NodeBuilder::new()
             .name(&naming::client_node(name)?)
-            .create::<ipc::Service>()
+            .create::<Svc>()
             .map_err(|e| Error::Internal(format!("failed to create node: {e}")))?;
         let mut servers: HashMap<Location, Box<dyn ServerLink>> = HashMap::from([(
             Location::Local,
@@ -877,7 +878,7 @@ impl Worker {
 /// engine is relayed. An event a subscriber misses only leaves it waiting, so the thread carries
 /// on after a failure.
 fn publish(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     producers: &mut Producers,
     relays: &mut Relays,
     record: EventRecord,

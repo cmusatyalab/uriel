@@ -1,6 +1,7 @@
 //! The client's ends of its producers' services. It keeps only the newest input of each producer,
 //! and publishes the events about each producer's inputs, for the producer's app.
 
+use crate::services::Svc;
 use std::{collections::HashMap, sync::Arc};
 
 use iceoryx2::{
@@ -33,7 +34,7 @@ pub(super) struct ReceivedInput {
 
 impl Producers {
     /// Starts taking inputs from the local producer `name`.
-    pub(super) fn add_producer(&mut self, node: &Node<ipc::Service>, name: &str) -> Result<()> {
+    pub(super) fn add_producer(&mut self, node: &Node<Svc>, name: &str) -> Result<()> {
         let producer = ProducerName::try_from(name)
             .map_err(|_| Error::InvalidArgument(format!("producer name {name:?} is too long")))?;
         if self.producers.contains_key(&producer) {
@@ -81,7 +82,7 @@ impl Producers {
     }
 
     /// The listeners that wake the client when a producer publishes.
-    pub(super) fn listeners(&self) -> impl Iterator<Item = &Listener<ipc::Service>> {
+    pub(super) fn listeners(&self) -> impl Iterator<Item = &Listener<Svc>> {
         self.producers.values().map(|ports| &ports.listener)
     }
 
@@ -124,8 +125,8 @@ impl Producers {
 
 #[derive(Debug)]
 struct ProducerPorts {
-    subscriber: Subscriber<ipc::Service, InputPayload, Envelope>,
-    listener: Listener<ipc::Service>,
+    subscriber: Subscriber<Svc, InputPayload, Envelope>,
+    listener: Listener<Svc>,
     /// The events about the producer's inputs, for its app.
     results: EventPublisher,
 }
@@ -182,8 +183,8 @@ mod tests {
         test_util::{INPUT_LEN, MAX_INPUT_SIZE, TIMEOUT, publish, unique},
     };
 
-    fn node() -> Node<ipc::Service> {
-        NodeBuilder::new().create::<ipc::Service>().unwrap()
+    fn node() -> Node<Svc> {
+        NodeBuilder::new().create::<Svc>().unwrap()
     }
 
     /// Waits for a producer to publish, then takes the inputs.

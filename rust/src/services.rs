@@ -14,6 +14,16 @@ use crate::ipc::types::{
 };
 use crate::{Error, Result, naming};
 
+/// The variant of iceoryx2 service that every port and node uses. Its ports are `Send` and `Sync`,
+/// so a producer, an engine, a subscription or a reader may move between threads.
+///
+/// It is shared memory between processes, unless the `in-process` feature keeps it in this
+/// process's memory.
+#[cfg(not(feature = "in-process"))]
+pub(crate) type Svc = ipc_threadsafe::Service;
+#[cfg(feature = "in-process")]
+pub(crate) type Svc = local_threadsafe::Service;
+
 /// Payload of a producer's input service.
 pub(crate) type InputPayload = [u8];
 
@@ -94,9 +104,9 @@ const OUTCOME_BUFFER_SIZE: usize = ENGINE_INPUT_BUFFER_SIZE;
 
 /// Opens (or creates) the input service of the producer `name`.
 pub(crate) fn open_producer_input(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     name: &str,
-) -> Result<publish_subscribe::PortFactory<ipc::Service, InputPayload, Envelope>> {
+) -> Result<publish_subscribe::PortFactory<Svc, InputPayload, Envelope>> {
     node.service_builder(&naming::producer_input_service(name)?)
         .publish_subscribe::<InputPayload>()
         .user_header::<Envelope>()
@@ -105,10 +115,7 @@ pub(crate) fn open_producer_input(
 }
 
 /// Opens (or creates) the event the producer `name` signals after each input.
-pub(crate) fn open_producer_ready(
-    node: &Node<ipc::Service>,
-    name: &str,
-) -> Result<event::PortFactory<ipc::Service>> {
+pub(crate) fn open_producer_ready(node: &Node<Svc>, name: &str) -> Result<event::PortFactory<Svc>> {
     node.service_builder(&naming::producer_ready_service(name)?)
         .event()
         .open_or_create()
@@ -124,9 +131,9 @@ pub(crate) fn open_producer_ready(
 /// publisher, the server, and one subscriber, the engine. A delivered input is never dropped,
 /// because its offer would then never end.
 pub(crate) fn open_engine_input(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     name: &str,
-) -> Result<publish_subscribe::PortFactory<ipc::Service, EngineInputPayload, InputHeader>> {
+) -> Result<publish_subscribe::PortFactory<Svc, EngineInputPayload, InputHeader>> {
     node.service_builder(&naming::engine_service(name)?)
         .publish_subscribe::<EngineInputPayload>()
         .user_header::<InputHeader>()
@@ -141,9 +148,9 @@ pub(crate) fn open_engine_input(
 /// Opens (or creates) the service the engine `name` reports its outcomes on, to its server. It
 /// has one publisher, the engine, and one subscriber, the server.
 pub(crate) fn open_engine_outcome(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     name: &str,
-) -> Result<publish_subscribe::PortFactory<ipc::Service, OutcomePayload, OutcomeRecord>> {
+) -> Result<publish_subscribe::PortFactory<Svc, OutcomePayload, OutcomeRecord>> {
     node.service_builder(&naming::engine_outcome_service(name)?)
         .publish_subscribe::<OutcomePayload>()
         .user_header::<OutcomeRecord>()
@@ -158,9 +165,9 @@ pub(crate) fn open_engine_outcome(
 /// Opens (or creates) the service on which the engine `name` sends its derived results to its
 /// server.
 pub(crate) fn open_engine_derived(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     name: &str,
-) -> Result<publish_subscribe::PortFactory<ipc::Service, DerivedPayload, DerivedRecord>> {
+) -> Result<publish_subscribe::PortFactory<Svc, DerivedPayload, DerivedRecord>> {
     node.service_builder(&naming::engine_derived_service(name)?)
         .publish_subscribe::<DerivedPayload>()
         .user_header::<DerivedRecord>()
@@ -183,28 +190,28 @@ pub(crate) fn fail_when_full(_: &BackpressureInfo) -> BackpressureAction {
 /// Opens (or creates) the event the server of the engine `name` signals after delivering an
 /// input, so the engine can wait for inputs instead of polling.
 pub(crate) fn open_engine_input_ready(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     name: &str,
-) -> Result<event::PortFactory<ipc::Service>> {
+) -> Result<event::PortFactory<Svc>> {
     open_ready(node, &naming::engine_input_ready_service(name)?, name)
 }
 
 /// Opens (or creates) the event the engine `name` signals after reporting an outcome, so its
 /// server wakes up as soon as the engine is free.
 pub(crate) fn open_engine_outcome_ready(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     name: &str,
-) -> Result<event::PortFactory<ipc::Service>> {
+) -> Result<event::PortFactory<Svc>> {
     open_ready(node, &naming::engine_outcome_ready_service(name)?, name)
 }
 
 /// Opens (or creates) an event between an engine and its server: one side signals, the other
 /// listens.
 fn open_ready(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     service: &ServiceName,
     engine: &str,
-) -> Result<event::PortFactory<ipc::Service>> {
+) -> Result<event::PortFactory<Svc>> {
     node.service_builder(service)
         .event()
         .max_notifiers(1)
@@ -220,18 +227,18 @@ fn open_ready(
 /// Opens (or creates) the event service of the engine `name`: every event about its inputs, in
 /// order. A subscriber that falls behind loses the oldest events, not the newest.
 pub(crate) fn open_engine_events(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     name: &str,
-) -> Result<publish_subscribe::PortFactory<ipc::Service, EventPayload, EventRecord>> {
+) -> Result<publish_subscribe::PortFactory<Svc, EventPayload, EventRecord>> {
     open_events(node, &naming::engine_events_service(name)?)
 }
 
 /// Opens (or creates) the event the server signals after publishing events of the engine `name`,
 /// so subscribers can wait for them.
 pub(crate) fn open_engine_events_ready(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     name: &str,
-) -> Result<event::PortFactory<ipc::Service>> {
+) -> Result<event::PortFactory<Svc>> {
     open_events_ready(node, &naming::engine_events_ready_service(name)?)
 }
 
@@ -240,27 +247,24 @@ pub(crate) fn open_engine_events_ready(
 /// inputs. Like an engine's event service, it drops the oldest events for a subscriber that falls
 /// behind.
 pub(crate) fn open_producer_results(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     name: &str,
-) -> Result<publish_subscribe::PortFactory<ipc::Service, EventPayload, EventRecord>> {
+) -> Result<publish_subscribe::PortFactory<Svc, EventPayload, EventRecord>> {
     open_events(node, &naming::producer_result_service(name)?)
 }
 
 /// Opens (or creates) the event the client signals after publishing events about the producer
 /// `name`'s inputs, so subscribers can wait for them.
 pub(crate) fn open_producer_results_ready(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     name: &str,
-) -> Result<event::PortFactory<ipc::Service>> {
+) -> Result<event::PortFactory<Svc>> {
     open_events_ready(node, &naming::producer_result_ready_service(name)?)
 }
 
 /// Opens (or creates) the event that the one publisher of an event service signals after each
 /// batch of events.
-fn open_events_ready(
-    node: &Node<ipc::Service>,
-    service: &ServiceName,
-) -> Result<event::PortFactory<ipc::Service>> {
+fn open_events_ready(node: &Node<Svc>, service: &ServiceName) -> Result<event::PortFactory<Svc>> {
     node.service_builder(service)
         .event()
         .max_notifiers(EVENT_PUBLISHERS)
@@ -272,9 +276,9 @@ fn open_events_ready(
 /// Opens (or creates) an event service: one publisher, and subscribers that lose their oldest
 /// events when they fall behind.
 fn open_events(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     service: &ServiceName,
-) -> Result<publish_subscribe::PortFactory<ipc::Service, EventPayload, EventRecord>> {
+) -> Result<publish_subscribe::PortFactory<Svc, EventPayload, EventRecord>> {
     node.service_builder(service)
         .publish_subscribe::<EventPayload>()
         .user_header::<EventRecord>()
@@ -290,9 +294,9 @@ fn open_events(
 /// [`Request`](crate::wire::Request), and each reply a postcard
 /// [`Response`](crate::wire::Response).
 pub(crate) fn open_server_control(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     name: &str,
-) -> Result<request_response::PortFactory<ipc::Service, ControlPayload, (), ControlPayload, ()>> {
+) -> Result<request_response::PortFactory<Svc, ControlPayload, (), ControlPayload, ()>> {
     node.service_builder(&naming::server_control_service(name)?)
         .request_response::<ControlPayload, ControlPayload>()
         .max_servers(1)
@@ -305,9 +309,9 @@ pub(crate) fn open_server_control(
 /// sample is one input sent on a crossing. An input is never dropped, because its offer would then
 /// never end before its deadline.
 pub(crate) fn open_server_input(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     name: &str,
-) -> Result<publish_subscribe::PortFactory<ipc::Service, CrossingPayload, CrossingHeader>> {
+) -> Result<publish_subscribe::PortFactory<Svc, CrossingPayload, CrossingHeader>> {
     node.service_builder(&naming::server_input_service(name)?)
         .publish_subscribe::<CrossingPayload>()
         .user_header::<CrossingHeader>()
@@ -321,9 +325,9 @@ pub(crate) fn open_server_input(
 
 /// Opens (or creates) the event local clients signal after sending the server `name` an input.
 pub(crate) fn open_server_input_ready(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     name: &str,
-) -> Result<event::PortFactory<ipc::Service>> {
+) -> Result<event::PortFactory<Svc>> {
     let service = naming::server_input_ready_service(name)?;
     node.service_builder(&service)
         .event()
@@ -336,9 +340,9 @@ pub(crate) fn open_server_input_ready(
 /// Opens (or creates) the stream of events the local server sends the client `name`: every event
 /// about the client's flows, in order, numbered from 1. The client's token accounting reads it.
 pub(crate) fn open_client_events(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     name: &str,
-) -> Result<publish_subscribe::PortFactory<ipc::Service, ClientEventPayload, ClientEventHeader>> {
+) -> Result<publish_subscribe::PortFactory<Svc, ClientEventPayload, ClientEventHeader>> {
     node.service_builder(&naming::client_events_service(name)?)
         .publish_subscribe::<ClientEventPayload>()
         .user_header::<ClientEventHeader>()
@@ -352,9 +356,9 @@ pub(crate) fn open_client_events(
 
 /// Opens (or creates) the event the local server signals after sending the client `name` events.
 pub(crate) fn open_client_events_ready(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     name: &str,
-) -> Result<event::PortFactory<ipc::Service>> {
+) -> Result<event::PortFactory<Svc>> {
     let service = naming::client_events_ready_service(name)?;
     node.service_builder(&service)
         .event()
@@ -367,9 +371,9 @@ pub(crate) fn open_client_events_ready(
 /// Opens (or creates) the event `service`, which a process's network thread signals to wake the
 /// thread that reads what it received.
 pub(crate) fn open_remote_ready(
-    node: &Node<ipc::Service>,
+    node: &Node<Svc>,
     service: &ServiceName,
-) -> Result<event::PortFactory<ipc::Service>> {
+) -> Result<event::PortFactory<Svc>> {
     node.service_builder(service)
         .event()
         .max_notifiers(1)
@@ -383,7 +387,7 @@ pub(crate) fn open_remote_ready(
 /// wake-up like any other, after which the caller checks again what it waits for; the Go runtime,
 /// for one, signals its threads often.
 pub(crate) fn wait_for_notification(
-    listener: &Listener<ipc::Service>,
+    listener: &Listener<Svc>,
     timeout: Duration,
 ) -> std::result::Result<bool, ListenerWaitError> {
     // iceoryx2 waits without end when given no time.
@@ -400,13 +404,13 @@ pub(crate) fn wait_for_notification(
 /// Waits until one of `listeners` has a notification, or `timeout` passes. Leaves the
 /// notifications to be read by the listeners' owners, who also read what they announce.
 pub(crate) fn wait_for_any<'a>(
-    listeners: impl IntoIterator<Item = &'a Listener<ipc::Service>>,
+    listeners: impl IntoIterator<Item = &'a Listener<Svc>>,
     timeout: Duration,
 ) -> Result<()> {
     // Uriel is a library: leave SIGINT/SIGTERM handling to the host application.
     let waitset = WaitSetBuilder::new()
         .signal_handling_mode(SignalHandlingMode::Disabled)
-        .create::<ipc::Service>()
+        .create::<Svc>()
         .map_err(|e| Error::Internal(format!("failed to create waitset: {e}")))?;
     // Each guard keeps its listener attached for as long as it lives.
     let guards = listeners
@@ -443,7 +447,7 @@ mod tests {
 
     #[test]
     fn engine_input_carries_its_header_and_payload() {
-        let node = NodeBuilder::new().create::<ipc::Service>().unwrap();
+        let node = NodeBuilder::new().create::<Svc>().unwrap();
         let service = open_engine_input(&node, &unique("engine")).unwrap();
         let publisher = service
             .publisher_builder()
@@ -479,7 +483,7 @@ mod tests {
 
     #[test]
     fn full_engine_input_fails_the_send_instead_of_waiting() {
-        let node = NodeBuilder::new().create::<ipc::Service>().unwrap();
+        let node = NodeBuilder::new().create::<Svc>().unwrap();
         let service = open_engine_input(&node, &unique("engine")).unwrap();
         let publisher = service
             .publisher_builder()
@@ -504,7 +508,7 @@ mod tests {
     #[test]
     fn engine_event_carries_its_record_and_result() {
         const RESULT: [u8; 2] = [9, 8];
-        let node = NodeBuilder::new().create::<ipc::Service>().unwrap();
+        let node = NodeBuilder::new().create::<Svc>().unwrap();
         let service = open_engine_events(&node, &unique("engine")).unwrap();
         let publisher = service
             .publisher_builder()
@@ -551,7 +555,7 @@ mod tests {
         const RESULT: [u8; 2] = [9, 8];
         const OUTPUT: [u8; 3] = [1, 2, 3];
         let payload: Vec<u8> = OUTPUT.iter().chain(&RESULT).copied().collect();
-        let node = NodeBuilder::new().create::<ipc::Service>().unwrap();
+        let node = NodeBuilder::new().create::<Svc>().unwrap();
         let service = open_engine_outcome(&node, &unique("engine")).unwrap();
         let publisher = service
             .publisher_builder()

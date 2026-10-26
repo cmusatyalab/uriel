@@ -2,6 +2,7 @@
 //! subscribe to other engines' events, wait for an input or an event with one call, and publish
 //! results it derives from them.
 
+use crate::services::Svc;
 use std::{iter, mem::MaybeUninit, time::Duration};
 
 use iceoryx2::port::{
@@ -42,7 +43,7 @@ impl Input<'_> {
 }
 
 /// An outcome being built by [`Engine::new_output`] and [`Engine::replace`].
-type Output = SampleMutUninit<ipc::Service, [MaybeUninit<u8>], OutcomeRecord>;
+type Output = SampleMutUninit<Svc, [MaybeUninit<u8>], OutcomeRecord>;
 
 /// Processes one input at a time, and reports exactly one outcome for it: drop, forward or
 /// replace.
@@ -51,16 +52,16 @@ pub struct Engine {
     result_type: PayloadType,
     max_output_size: usize,
     #[allow(dead_code)] // keeps the services alive
-    node: Node<ipc::Service>,
-    inputs: Subscriber<ipc::Service, [u8], InputHeader>,
+    node: Node<Svc>,
+    inputs: Subscriber<Svc, [u8], InputHeader>,
     /// Signalled by the server after each input it delivers.
-    input_ready: Listener<ipc::Service>,
-    outcomes: Publisher<ipc::Service, [u8], OutcomeRecord>,
+    input_ready: Listener<Svc>,
+    outcomes: Publisher<Svc, [u8], OutcomeRecord>,
     /// Signalled after each outcome and derived result, so the server handles it right away.
-    outcome_ready: Notifier<ipc::Service>,
-    derived: Publisher<ipc::Service, [u8], DerivedRecord>,
+    outcome_ready: Notifier<Svc>,
+    derived: Publisher<Svc, [u8], DerivedRecord>,
     /// The input being processed, until its outcome is reported.
-    current: Option<Sample<ipc::Service, [u8], InputHeader>>,
+    current: Option<Sample<Svc, [u8], InputHeader>>,
     /// The output being written, until it replaces the input.
     output: Option<Output>,
     /// The engines the engine subscribed to, by name.
@@ -78,7 +79,7 @@ impl Engine {
         // The server tells that the engine's process stopped by this node.
         let node = NodeBuilder::new()
             .name(&naming::engine_node(name)?)
-            .create::<ipc::Service>()
+            .create::<Svc>()
             .map_err(|e| Error::Internal(format!("failed to create node: {e}")))?;
         let inputs = services::open_engine_input(&node, name)?
             .subscriber_builder()
@@ -394,10 +395,10 @@ mod tests {
     /// An engine, and the server side of its services.
     struct Fixture {
         engine: Engine,
-        inputs: Publisher<ipc::Service, [u8], InputHeader>,
-        input_ready: Notifier<ipc::Service>,
-        outcomes: Subscriber<ipc::Service, [u8], OutcomeRecord>,
-        outcome_ready: Listener<ipc::Service>,
+        inputs: Publisher<Svc, [u8], InputHeader>,
+        input_ready: Notifier<Svc>,
+        outcomes: Subscriber<Svc, [u8], OutcomeRecord>,
+        outcome_ready: Listener<Svc>,
     }
 
     impl Fixture {
@@ -666,7 +667,7 @@ mod tests {
 
     impl Events {
         fn new(engine: &str) -> Self {
-            let node = NodeBuilder::new().create::<ipc::Service>().unwrap();
+            let node = NodeBuilder::new().create::<Svc>().unwrap();
             Self(crate::events::EventPublisher::engine(&node, engine).unwrap())
         }
 

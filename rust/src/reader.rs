@@ -2,6 +2,7 @@
 //! that takes them. A reader sees every input, in order, unlike the client, which keeps only the
 //! newest; one that falls behind loses the oldest, and learns how many from [`ReadInput::lost`].
 
+use crate::services::Svc;
 use std::time::Duration;
 
 use iceoryx2::port::{listener::Listener, subscriber::Subscriber};
@@ -16,16 +17,16 @@ use crate::{
     services::{self, InputPayload},
 };
 
-type InputSample = Sample<ipc::Service, InputPayload, Envelope>;
+type InputSample = Sample<Svc, InputPayload, Envelope>;
 
 /// Reads the inputs of one producer. Only inputs published from now on are read.
 pub struct Reader {
     #[allow(dead_code)] // keeps the ports alive
-    node: Node<ipc::Service>,
+    node: Node<Svc>,
     producer: ProducerName,
-    inputs: Subscriber<ipc::Service, InputPayload, Envelope>,
+    inputs: Subscriber<Svc, InputPayload, Envelope>,
     /// Signalled by the producer after each input.
-    ready: Listener<ipc::Service>,
+    ready: Listener<Svc>,
     /// The session and sequence number of the input read last, to tell how many were lost before
     /// the next one.
     last: Option<(u64, u64)>,
@@ -74,7 +75,7 @@ impl Reader {
         let producer = ProducerName::try_from(name)
             .map_err(|_| Error::InvalidArgument(format!("producer name {name:?} is too long")))?;
         let node = NodeBuilder::new()
-            .create::<ipc::Service>()
+            .create::<Svc>()
             .map_err(|e| Error::Internal(format!("failed to create node: {e}")))?;
         let inputs = services::open_producer_input(&node, name)?
             .subscriber_builder()

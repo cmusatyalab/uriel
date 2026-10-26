@@ -6,6 +6,7 @@
 //! stream, which carries the input's header and then its bytes. The server sends every event of
 //! the client's flows on one unidirectional stream, in order.
 
+use crate::services::Svc;
 use std::{
     net::{Ipv4Addr, SocketAddr},
     sync::{Arc, mpsc},
@@ -80,7 +81,7 @@ pub(super) struct RemoteServer {
     requests: Option<UnboundedSender<Command>>,
     updates: mpsc::Receiver<Update>,
     /// Wakes the client thread after each update.
-    ready: Listener<ipc::Service>,
+    ready: Listener<Svc>,
     connected: bool,
     thread: Option<JoinHandle<()>>,
 }
@@ -89,7 +90,7 @@ impl RemoteServer {
     /// Starts connecting the client `client` to the remote server at `addr`, whose certificate is
     /// `certificate`, in DER. The server may start later.
     pub(super) fn open(
-        node: &Node<ipc::Service>,
+        node: &Node<Svc>,
         client: &str,
         addr: SocketAddr,
         certificate: &[u8],
@@ -230,7 +231,7 @@ impl ServerLink for RemoteServer {
     }
 
     /// The listener the network thread signals after each update.
-    fn ready(&self) -> &Listener<ipc::Service> {
+    fn ready(&self) -> &Listener<Svc> {
         &self.ready
     }
 
@@ -582,7 +583,7 @@ mod tests {
         server: Server,
         engine: Engine,
         detector: String,
-        node: Node<ipc::Service>,
+        node: Node<Svc>,
     }
 
     impl Fixture {
@@ -591,7 +592,7 @@ mod tests {
             let engine = Engine::new(&detector, None, MAX_OUTPUT_SIZE).unwrap();
             let mut server = Server::new(&unique("server"), Some("127.0.0.1:0"), None).unwrap();
             server.add_engine(&detector).unwrap();
-            let node = NodeBuilder::new().create::<ipc::Service>().unwrap();
+            let node = NodeBuilder::new().create::<Svc>().unwrap();
             Self {
                 server,
                 engine,
@@ -751,7 +752,7 @@ mod tests {
         // iceoryx2 changes the process's umask while it binds a socket, and parallel tests can
         // leave it changed.
         std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
-        let node = NodeBuilder::new().create::<ipc::Service>().unwrap();
+        let node = NodeBuilder::new().create::<Svc>().unwrap();
         let server = Server::new(&unique("server"), Some("127.0.0.1:0"), Some(dir.path())).unwrap();
         let addr = server.remote_addr().unwrap();
         let mut remote = RemoteServer::open(
