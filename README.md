@@ -136,4 +136,4 @@ The tag starts `.github/workflows/release.yml`. It publishes the Python package 
 
 ## License
 
-Apache 2.0. See [LICENSE](LICENSE).
+See [LICENSE](LICENSE).
