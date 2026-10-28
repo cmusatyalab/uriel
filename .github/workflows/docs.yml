@@ -1,0 +1,64 @@
+name: Docs
+
+# Builds the Python API reference from the package's docstrings with pdoc, and publishes it to
+# GitHub Pages whenever the Python package or the Rust library changes on main. Run it by hand to
+# publish again.
+#
+# Once, in the repository's settings: Pages > Build and deployment > Source: GitHub Actions.
+on:
+  push:
+    branches: [main]
+    paths:
+      - python/**
+      - rust/**
+      - .github/workflows/docs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a newer push waits for the running one instead of cancelling it.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install libclang
+        # libclang generates iceoryx2's bindings.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libclang-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Build the reference
+        # pdoc imports the package, so uv builds it first.
+        working-directory: python
+        run: uv run --locked --with "pdoc>=16,<17" pdoc uriel --output-directory ../site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

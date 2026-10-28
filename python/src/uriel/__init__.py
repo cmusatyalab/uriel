@@ -1,7 +1,7 @@
 """Python bindings for Uriel, through its C ABI (rust/include/uriel/uriel.h).
 
-A producer publishes inputs on a flow. A client takes the producer's inputs and offers them to the
-flow's engines, which a server serves. Each engine processes one input at a time and reports one
+A producer publishes inputs. A client takes the producer's inputs and sends them through the flows
+that list the producer to the flows' engines, which a server serves. Each engine processes one input at a time and reports one
 outcome for it: `Engine.drop`, `Engine.forward` or `Engine.replace`. The app reads what happened to
 its producer's inputs from a `Subscription`, and anyone can read a producer's inputs themselves with
 a `Reader`.
