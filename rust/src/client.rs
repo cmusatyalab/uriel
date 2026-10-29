@@ -11,8 +11,9 @@ mod server_link;
 mod worker;
 
 pub(crate) use compile::validate;
+pub(crate) use remote_server::validate_addr;
 
-use std::{net::SocketAddr, sync::mpsc, thread::JoinHandle};
+use std::{sync::mpsc, thread::JoinHandle};
 
 use crate::{Error, Result, Subscription, client::worker::Command, services, spec::FlowSpec};
 
@@ -24,8 +25,11 @@ pub const DEFAULT_REMOTE_CROSSING_CAPACITY: usize = services::LOCAL_CROSSING_CAP
 /// How a client reaches the remote server.
 #[derive(Debug, Clone)]
 pub struct RemoteServerConfig {
-    /// The server's address, as [`Server::remote_addr`](crate::Server::remote_addr) gives it.
-    pub addr: SocketAddr,
+    /// The server's address as `host:port`, where `host` is an IPv4 address or a name. A name is
+    /// resolved each time the client connects, so the server may move; of its addresses, the
+    /// client uses the first IPv4 one. [`Server::remote_addr`](crate::Server::remote_addr) gives
+    /// the address of a server in this process.
+    pub addr: String,
     /// The only certificate the client trusts, in DER, as
     /// [`Server::certificate`](crate::Server::certificate) gives it.
     pub certificate: Vec<u8>,
@@ -36,9 +40,9 @@ pub struct RemoteServerConfig {
 
 impl RemoteServerConfig {
     /// The remote server at `addr`, with its `certificate`, and the default crossing capacity.
-    pub fn new(addr: SocketAddr, certificate: Vec<u8>) -> Self {
+    pub fn new(addr: impl ToString, certificate: Vec<u8>) -> Self {
         Self {
-            addr,
+            addr: addr.to_string(),
             certificate,
             crossing_capacity: DEFAULT_REMOTE_CROSSING_CAPACITY,
         }
@@ -57,12 +61,13 @@ impl Client {
     /// remote server `remote` if it is given. Both servers may start later; the client connects
     /// to the remote server, and connects again after a loss, on its own.
     pub fn new(name: &str, local_server: &str, remote: Option<RemoteServerConfig>) -> Result<Self> {
-        if let Some(remote) = &remote
-            && remote.crossing_capacity == 0
-        {
-            return Err(Error::InvalidArgument(String::from(
-                "crossings to the remote server need a capacity of at least 1",
-            )));
+        if let Some(remote) = &remote {
+            if remote.crossing_capacity == 0 {
+                return Err(Error::InvalidArgument(String::from(
+                    "crossings to the remote server need a capacity of at least 1",
+                )));
+            }
+            validate_addr(&remote.addr)?;
         }
         let (commands, thread) = worker::spawn(name, local_server, remote)?;
         Ok(Self {
@@ -1114,7 +1119,7 @@ mod tests {
     fn remote_crossings_need_capacity() {
         let remote = RemoteServerConfig {
             crossing_capacity: 0,
-            ..RemoteServerConfig::new(std::net::SocketAddr::from(([127, 0, 0, 1], 0)), Vec::new())
+            ..RemoteServerConfig::new("127.0.0.1:0", Vec::new())
         };
 
         let created = Client::new(&unique("client"), &unique("server"), Some(remote));

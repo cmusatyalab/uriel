@@ -269,7 +269,7 @@ impl Worker {
         )]);
         let mut remote_crossing_capacity = LOCAL_CROSSING_CAPACITY;
         if let Some(remote) = remote {
-            let server = RemoteServer::open(&node, name, remote.addr, &remote.certificate)?;
+            let server = RemoteServer::open(&node, name, &remote.addr, &remote.certificate)?;
             servers.insert(Location::Remote, Box::new(server));
             remote_crossing_capacity = remote.crossing_capacity;
         }

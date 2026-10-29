@@ -12,7 +12,8 @@ class RemoteServer:
     """How a client reaches a remote server."""
 
     addr: str
-    """The server's address, e.g. "192.0.2.1:4433"."""
+    """The server's address as host:port, e.g. "192.0.2.1:4433" or "edge.example.com:4433". A name
+    is resolved at each connection, and only its IPv4 addresses are used."""
     certificate: bytes
     """The server's certificate, in DER, as `Server.certificate` gives it. The client trusts only
     this certificate."""

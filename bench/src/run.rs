@@ -8,7 +8,6 @@
 
 use std::{
     collections::{BTreeSet, HashMap},
-    net::ToSocketAddrs,
     sync::{
         Arc, Barrier, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -235,7 +234,8 @@ fn remote_config(spec: &RunSpec, remote: Option<&Server>) -> Result<Option<Remot
         return Ok(Some(RemoteServerConfig {
             addr: remote
                 .remote_addr()
-                .expect("the remote server accepts remote clients"),
+                .expect("the remote server accepts remote clients")
+                .to_string(),
             certificate: remote
                 .certificate()
                 .expect("the remote server accepts remote clients")
@@ -247,11 +247,7 @@ fn remote_config(spec: &RunSpec, remote: Option<&Server>) -> Result<Option<Remot
         return Ok(None);
     };
     Ok(Some(RemoteServerConfig {
-        addr: addr
-            .to_socket_addrs()
-            .with_context(|| format!("failed to resolve the remote server {addr}"))?
-            .next()
-            .with_context(|| format!("the remote server {addr} has no address"))?,
+        addr: addr.clone(),
         certificate: std::fs::read(certificate).with_context(|| {
             format!(
                 "failed to read the remote server's certificate {}",

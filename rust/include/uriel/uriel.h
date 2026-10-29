@@ -432,9 +432,9 @@ uriel_status_t uriel_client_options_destroy(uriel_client_options_t *options);
  * Makes the client also use a remote server, e.g. on a cloudlet, for the engines that a flow spec
  * marks `location = "remote"`.
  *
- * - `addr`: the server's IP address and port, e.g. "192.0.2.1:4433" or "[2001:db8::1]:4433". A
- *   host name is not accepted. The port is the one `uriel_server_remote_port` gives on the
- *   server.
+ * - `addr`: the server's address as host:port, e.g. "192.0.2.1:4433" or "edge.example.com:4433".
+ *   A name is resolved each time the client connects, and only its IPv4 addresses are used. The
+ *   port is the one `uriel_server_remote_port` gives on the server.
  * - `certificate`, `certificate_len`: the server's certificate in DER, as
  *   `uriel_server_certificate` gives it on the server, e.g. copied from the `certificate.der` file
  *   in its identity directory. The client trusts this certificate only.

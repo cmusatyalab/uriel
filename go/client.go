@@ -18,8 +18,9 @@ type clientOptions struct {
 	crossingCapacity *int
 }
 
-// WithRemoteServer connects the client to the remote server at addr, e.g. "192.0.2.1:4433". The
-// client trusts only certificate, in DER, as [Server.Certificate] gives it.
+// WithRemoteServer connects the client to the remote server at addr, as host:port, e.g.
+// "192.0.2.1:4433" or "edge.example.com:4433". A name is resolved at each connection, and only its
+// IPv4 addresses are used. The client trusts only certificate, in DER, as [Server.Certificate] gives it.
 func WithRemoteServer(addr string, certificate []byte) ClientOption {
 	return func(o *clientOptions) {
 		o.remoteAddr = addr

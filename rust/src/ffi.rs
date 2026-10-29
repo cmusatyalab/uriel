@@ -22,8 +22,8 @@ use iceoryx2_bb_container::string::String as _;
 
 use crate::{
     Client, Engine, Error, EventKind, FlowSpec, InputId, Outcome, Producer, Reader,
-    RemoteServerConfig, Result, Server, Subscription, logging, reader::ReadInput,
-    routing::ids::ProducerName, subscription::Event,
+    RemoteServerConfig, Result, Server, Subscription, client::validate_addr, logging,
+    reader::ReadInput, routing::ids::ProducerName, subscription::Event,
 };
 
 /// The version of the ABI that this library implements.
@@ -330,9 +330,9 @@ pub unsafe extern "C" fn uriel_client_options_destroy(options: *mut ClientOption
 /// Makes the client also use a remote server, e.g. on a cloudlet, for the engines that a flow spec
 /// marks `location = "remote"`.
 ///
-/// - `addr`: the server's IP address and port, e.g. "192.0.2.1:4433" or "[2001:db8::1]:4433". A
-///   host name is not accepted. The port is the one `uriel_server_remote_port` gives on the
-///   server.
+/// - `addr`: the server's address as host:port, e.g. "192.0.2.1:4433" or "edge.example.com:4433".
+///   A name is resolved each time the client connects, and only its IPv4 addresses are used. The
+///   port is the one `uriel_server_remote_port` gives on the server.
 /// - `certificate`, `certificate_len`: the server's certificate in DER, as
 ///   `uriel_server_certificate` gives it on the server, e.g. copied from the `certificate.der` file
 ///   in its identity directory. The client trusts this certificate only.
@@ -354,9 +354,7 @@ pub unsafe extern "C" fn uriel_client_options_set_remote_server(
         (|| {
             let options = handle_arg(options)?;
             let addr = str_arg(addr)?;
-            let addr = addr
-                .parse()
-                .map_err(|e| Error::InvalidArgument(format!("invalid address {addr:?}: {e}")))?;
+            validate_addr(addr)?;
             let certificate = bytes_arg(certificate, certificate_len)?.to_vec();
             options.remote = Some(RemoteServerConfig::new(addr, certificate));
             Ok(())

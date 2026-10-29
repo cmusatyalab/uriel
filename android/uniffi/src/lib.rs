@@ -12,7 +12,6 @@
 //! times are never negative; a session is a random number, reinterpreted as signed.
 
 use std::{
-    net::SocketAddr,
     sync::{Arc, Mutex, MutexGuard, PoisonError},
     time::Duration,
 };
@@ -77,8 +76,8 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 /// The remote server a client sends to.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct RemoteServer {
-    /// The server's IP address and port, e.g. "192.0.2.1:4433" or "[2001:db8::1]:4433". A host
-    /// name is not accepted.
+    /// The server's address as host:port, e.g. "192.0.2.1:4433" or "edge.example.com:4433". A name
+    /// is resolved at each connection; only its IPv4 addresses are used.
     pub addr: String,
     /// The server's certificate in DER. The client trusts this certificate only.
     pub certificate: Vec<u8>,
@@ -89,10 +88,7 @@ pub struct RemoteServer {
 
 impl RemoteServer {
     fn config(self) -> Result<uriel::RemoteServerConfig> {
-        let addr: SocketAddr = self.addr.parse().map_err(|e| UrielError::InvalidArgument {
-            reason: format!("invalid server address {:?}: {e}", self.addr),
-        })?;
-        let mut config = uriel::RemoteServerConfig::new(addr, self.certificate);
+        let mut config = uriel::RemoteServerConfig::new(self.addr, self.certificate);
         if let Some(capacity) = self.crossing_capacity {
             config.crossing_capacity = to_usize("crossing capacity", capacity)?;
         }

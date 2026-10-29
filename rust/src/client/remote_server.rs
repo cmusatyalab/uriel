@@ -76,7 +76,8 @@ enum Update {
 pub(super) struct RemoteServer {
     /// The client's name, which the server sends the flow's events to.
     client: String,
-    addr: SocketAddr,
+    /// The server's `host:port`.
+    addr: String,
     /// `None` once dropped, which stops the network thread.
     requests: Option<UnboundedSender<Command>>,
     updates: mpsc::Receiver<Update>,
@@ -92,7 +93,7 @@ impl RemoteServer {
     pub(super) fn open(
         node: &Node<Svc>,
         client: &str,
-        addr: SocketAddr,
+        addr: &str,
         certificate: &[u8],
     ) -> Result<Self> {
         let ready_service = naming::client_remote_ready_service(client)?;
@@ -103,7 +104,8 @@ impl RemoteServer {
         let config = net::client_config(certificate)?;
         let (requests_tx, requests_rx) = unbounded_channel();
         let (updates_tx, updates_rx) = mpsc::channel();
-        let span = info_span!("remote server", %addr);
+        let span = info_span!("remote server", addr);
+        let network_addr = addr.to_owned();
         let ((), thread) = net::spawn(
             format!("uriel-client-{client}-network"),
             ready_service,
@@ -113,7 +115,7 @@ impl RemoteServer {
                 endpoint.set_default_client_config(config);
                 let network = Network {
                     endpoint,
-                    addr,
+                    addr: network_addr,
                     requests: requests_rx,
                     updates: updates_tx,
                     waker,
@@ -123,7 +125,7 @@ impl RemoteServer {
         )?;
         Ok(Self {
             client: client.to_owned(),
-            addr,
+            addr: addr.to_owned(),
             requests: Some(requests_tx),
             updates: updates_rx,
             ready,
@@ -277,7 +279,8 @@ impl Drop for RemoteServer {
 /// The network thread's state.
 struct Network {
     endpoint: Endpoint,
-    addr: SocketAddr,
+    /// The server's `host:port`, resolved at each connection.
+    addr: String,
     requests: UnboundedReceiver<Command>,
     updates: mpsc::Sender<Update>,
     waker: Waker,
@@ -290,7 +293,7 @@ impl Network {
         let mut backoff = RECONNECT_MIN_BACKOFF;
         loop {
             // A clone, so that requests can be answered while connecting.
-            let connect = connect(self.endpoint.clone(), self.addr);
+            let connect = connect(self.endpoint.clone(), self.addr.clone());
             let Some(connected) = self.without_connection(connect).await else {
                 break;
             };
@@ -346,7 +349,7 @@ impl Network {
         self.update(Update::Connected);
         let (events_tx, mut events) = unbounded_channel();
         let reader = tokio::spawn(read_events(connection.clone(), events_tx));
-        let mut metrics = ConnectionMetrics::new(self.addr);
+        let mut metrics = ConnectionMetrics::new(connection.remote_address());
         let mut stats_timer = tokio::time::interval(STATS_INTERVAL);
         let outcome = loop {
             tokio::select! {
@@ -463,6 +466,15 @@ impl ConnectionMetrics {
 /// Why connecting failed.
 #[derive(Debug, thiserror::Error)]
 enum ConnectFailure {
+    /// The server's name did not resolve.
+    #[error("failed to resolve {addr}: {source}")]
+    Resolve {
+        addr: String,
+        source: std::io::Error,
+    },
+    /// The name resolved, but not to an IPv4 address, which is all the client's socket reaches.
+    #[error("{0} has no IPv4 address")]
+    NoIpv4Address(String),
     /// The connection could not be started.
     #[error(transparent)]
     Start(#[from] quinn::ConnectError),
@@ -471,10 +483,41 @@ enum ConnectFailure {
     Handshake(#[from] quinn::ConnectionError),
 }
 
+/// Checks that `addr` is `host:port`, so a typo is an error when the client is created, not a
+/// failure to resolve each time it connects. Whether the host exists is for [`resolve`] to find
+/// out.
+pub(crate) fn validate_addr(addr: &str) -> Result<()> {
+    let invalid =
+        |reason: &str| Error::InvalidArgument(format!("invalid address {addr:?}: {reason}"));
+    let (host, port) = addr
+        .rsplit_once(':')
+        .ok_or_else(|| invalid("expected host:port"))?;
+    if host.is_empty() {
+        return Err(invalid("the host is empty"));
+    }
+    port.parse::<u16>()
+        .map_err(|e| invalid(&format!("invalid port: {e}")))?;
+    Ok(())
+}
+
+/// The first IPv4 address of `addr`, a `host:port`. The client's socket is IPv4, so it cannot
+/// reach another kind.
+async fn resolve(addr: &str) -> std::result::Result<SocketAddr, ConnectFailure> {
+    tokio::net::lookup_host(addr)
+        .await
+        .map_err(|source| ConnectFailure::Resolve {
+            addr: addr.to_owned(),
+            source,
+        })?
+        .find(SocketAddr::is_ipv4)
+        .ok_or_else(|| ConnectFailure::NoIpv4Address(addr.to_owned()))
+}
+
 async fn connect(
     endpoint: Endpoint,
-    addr: SocketAddr,
+    addr: String,
 ) -> std::result::Result<Connection, ConnectFailure> {
+    let addr = resolve(&addr).await?;
     Ok(endpoint.connect(addr, net::SERVER_NAME)?.await?)
 }
 
@@ -603,10 +646,15 @@ mod tests {
 
         /// A link to the server, once it is connected.
         fn connect(&self) -> RemoteServer {
+            self.connect_to(&self.server.remote_addr().unwrap().to_string())
+        }
+
+        /// A link to the server at `addr`, once it is connected.
+        fn connect_to(&self, addr: &str) -> RemoteServer {
             let mut remote = RemoteServer::open(
                 &self.node,
                 &unique("client"),
-                self.server.remote_addr().unwrap(),
+                addr,
                 self.server.certificate().unwrap(),
             )
             .unwrap();
@@ -638,6 +686,37 @@ mod tests {
     }
 
     const FLOW: &str = "tracking";
+
+    #[test]
+    fn connects_to_a_host_name() {
+        let fixture = Fixture::new();
+        let port = fixture.server.remote_addr().unwrap().port();
+
+        // "localhost" may resolve to ::1 first; the client must skip to 127.0.0.1.
+        let remote = fixture.connect_to(&format!("localhost:{port}"));
+
+        assert!(remote.is_connected());
+    }
+
+    #[test]
+    fn address_must_be_host_and_port() {
+        for addr in [
+            "",
+            "localhost",
+            ":4433",
+            "localhost:",
+            "localhost:http",
+            "localhost:65536",
+        ] {
+            assert!(
+                matches!(validate_addr(addr), Err(Error::InvalidArgument(_))),
+                "{addr:?}"
+            );
+        }
+        for addr in ["127.0.0.1:4433", "edge.example.com:4433", "localhost:0"] {
+            assert!(validate_addr(addr).is_ok(), "{addr:?}");
+        }
+    }
 
     fn wait_until(mut done: impl FnMut() -> bool) {
         let deadline = Instant::now() + NETWORK_TIMEOUT;
@@ -713,7 +792,7 @@ mod tests {
             &fixture.node,
             &unique("client"),
             // Nothing listens on the discard port of loopback.
-            SocketAddr::from((Ipv4Addr::LOCALHOST, 9)),
+            "127.0.0.1:9",
             fixture.server.certificate().unwrap(),
         )
         .unwrap();
@@ -734,7 +813,7 @@ mod tests {
         let mut remote = RemoteServer::open(
             &fixture.node,
             &unique("client"),
-            fixture.server.remote_addr().unwrap(),
+            &fixture.server.remote_addr().unwrap().to_string(),
             other.certificate().unwrap(),
         )
         .unwrap();
@@ -758,7 +837,7 @@ mod tests {
         let mut remote = RemoteServer::open(
             &node,
             &unique("client"),
-            addr,
+            &addr.to_string(),
             server.certificate().unwrap(),
         )
         .unwrap();
