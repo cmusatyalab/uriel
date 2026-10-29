@@ -7,6 +7,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use petgraph::{
+    Direction::Incoming,
     algo::toposort,
     graph::{DiGraph, EdgeReference, NodeIndex},
     visit::{Dfs, EdgeRef},
@@ -32,6 +33,9 @@ pub(super) const REMOTE_RTT_BOUND: Duration = Duration::from_secs(1);
 /// The token left over when every place that can hold one of a producer's inputs holds one, so
 /// that a newer input can still replace a waiting one ("Choosing C" in the design note).
 const SPARE_TOKENS: usize = 1;
+
+/// How many edges may lead to one engine: flows fan out but never join.
+const MAX_INCOMING_EDGES: usize = 1;
 
 /// A flow, split into the client's part and a part for each server that runs its engines.
 #[derive(Debug)]
@@ -82,6 +86,12 @@ fn wait_at(location: Location, timeout: Duration) -> Duration {
         Location::Local => engine_wait(timeout),
         Location::Remote => engine_wait(timeout) + REMOTE_RTT_BOUND,
     }
+}
+
+/// Checks `spec` without a client or a server: everything [`compile`] checks, which is all of the
+/// graph. The remote crossing capacity only sizes the tokens, so any value does.
+pub(crate) fn validate(spec: &FlowSpec) -> Result<()> {
+    compile("", spec, super::DEFAULT_REMOTE_CROSSING_CAPACITY).map(drop)
 }
 
 /// Checks `spec`, and splits the flow `flow` between the client and the servers. Each crossing to
@@ -149,6 +159,14 @@ pub(super) fn compile(
         }
         // Edges are added in order, so an edge's index in the graph is its id.
         graph.add_edge(from, to, edge.timeout);
+    }
+    for node in graph.node_indices() {
+        if graph.edges_directed(node, Incoming).count() > MAX_INCOMING_EDGES {
+            return Err(Error::InvalidArgument(format!(
+                "engine {:?} has more than one incoming edge; flows cannot join",
+                graph[node]
+            )));
+        }
     }
     let order = toposort(&graph, None).map_err(|cycle| {
         Error::InvalidArgument(format!(
@@ -494,8 +512,8 @@ mod tests {
     #[test]
     fn a_producers_edges_form_one_crossing() {
         let mut spec = cascade();
-        spec.edges
-            .push(edge("camera", "detector", DETECTOR_TIMEOUT));
+        spec.engines.push(engine("preview"));
+        spec.edges.push(edge("camera", "preview", DETECTOR_TIMEOUT));
 
         let compiled = compile(FLOW, &spec, REMOTE_CROSSING_CAPACITY).unwrap();
 
@@ -504,7 +522,7 @@ mod tests {
             panic!("expected one crossing, got {:?}", local.crossings);
         };
         let targets: Vec<NodeId> = crossing.targets.iter().map(|target| target.to).collect();
-        assert_eq!(targets, vec![NodeId(0), NodeId(1)]);
+        assert_eq!(targets, vec![NodeId(0), NodeId(2)]);
         // The crossing waits for its slowest target.
         assert_eq!(compiled.crossings[0].timeout, engine_wait(DETECTOR_TIMEOUT));
     }
@@ -512,8 +530,8 @@ mod tests {
     #[test]
     fn ticket_timeout_covers_the_longest_path() {
         let mut spec = cascade();
-        spec.edges
-            .push(edge("camera", "detector", DETECTOR_TIMEOUT));
+        spec.engines.push(engine("preview"));
+        spec.edges.push(edge("camera", "preview", DETECTOR_TIMEOUT));
 
         let compiled = compile(FLOW, &spec, REMOTE_CROSSING_CAPACITY).unwrap();
 
@@ -671,8 +689,11 @@ mod tests {
     #[test]
     fn a_producers_edges_to_each_server_form_a_crossing() {
         let mut spec = offload();
-        spec.edges
-            .push(edge("camera", "detector", DETECTOR_TIMEOUT));
+        spec.engines.push(EngineSpec {
+            name: String::from("archive"),
+            location: Location::Remote,
+        });
+        spec.edges.push(edge("camera", "archive", DETECTOR_TIMEOUT));
 
         let compiled = compile(FLOW, &spec, REMOTE_CROSSING_CAPACITY).unwrap();
 
@@ -695,13 +716,41 @@ mod tests {
     }
 
     #[test]
+    fn validate_accepts_a_good_spec_and_rejects_a_bad_one() {
+        let mut cyclic = cascade();
+        cyclic
+            .edges
+            .push(edge("detector", "filter", FILTER_TIMEOUT));
+
+        assert!(validate(&offload()).is_ok());
+        assert!(matches!(validate(&cyclic), Err(Error::InvalidArgument(_))));
+    }
+
+    #[test]
+    fn engine_with_two_incoming_edges_is_rejected() {
+        let mut from_two_engines = cascade();
+        from_two_engines.engines.push(engine("tracker"));
+        from_two_engines
+            .edges
+            .push(edge("tracker", "detector", DETECTOR_TIMEOUT));
+        let mut from_producer_and_engine = cascade();
+        from_producer_and_engine
+            .edges
+            .push(edge("camera", "detector", DETECTOR_TIMEOUT));
+
+        assert!(rejects(&from_two_engines));
+        assert!(rejects(&from_producer_and_engine));
+    }
+
+    #[test]
     fn token_count_defaults_to_the_places_on_the_paths() {
         let mut chain = cascade();
         chain.producers[0].tokens = None;
         let mut fan_out = chain.clone();
+        fan_out.engines.push(engine("preview"));
         fan_out
             .edges
-            .push(edge("camera", "detector", DETECTOR_TIMEOUT));
+            .push(edge("camera", "preview", DETECTOR_TIMEOUT));
         let mut remote = offload();
         remote.producers[0].tokens = None;
 
@@ -714,8 +763,8 @@ mod tests {
 
         // 2 engines, 2 edges, and a spare.
         assert_eq!(tokens(&chain), 5);
-        // The detector counts once, but each of its edges has a pending slot.
-        assert_eq!(tokens(&fan_out), 6);
+        // The preview adds an engine and an edge.
+        assert_eq!(tokens(&fan_out), 7);
         // 3 engines, 3 edges, the uplink's capacity, and a spare.
         assert_eq!(tokens(&remote), 3 + 3 + REMOTE_CROSSING_CAPACITY + 1);
     }
@@ -728,12 +777,13 @@ mod tests {
             name: String::from("lidar"),
             tokens: None,
         });
-        spec.edges.push(edge("lidar", "detector", DETECTOR_TIMEOUT));
+        spec.engines.push(engine("scan"));
+        spec.edges.push(edge("lidar", "scan", DETECTOR_TIMEOUT));
 
         let compiled = compile(FLOW, &spec, REMOTE_CROSSING_CAPACITY).unwrap();
 
         let tokens: Vec<usize> = compiled.producers.iter().map(|p| p.tokens).collect();
-        // The lidar reaches only the detector: 1 engine, 1 edge, and a spare.
+        // The lidar reaches only the scan: 1 engine, 1 edge, and a spare.
         assert_eq!(tokens, vec![5, 3]);
     }
 

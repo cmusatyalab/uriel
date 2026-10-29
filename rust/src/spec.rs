@@ -91,6 +91,16 @@ pub struct EdgeSpec {
     pub timeout: Duration,
 }
 
+impl FlowSpec {
+    /// Checks the graph without a client or any servers: names, edges, cycles, joins, and that
+    /// no edge leads from the remote server back to the device. Whether the engines are
+    /// registered is not checked; [`Client::add_flow`](crate::Client::add_flow) does that, and
+    /// runs this check first.
+    pub fn validate(&self) -> Result<(), Error> {
+        crate::client::validate(self)
+    }
+}
+
 impl FromStr for FlowSpec {
     type Err = Error;
 

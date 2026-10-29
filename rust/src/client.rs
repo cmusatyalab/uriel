@@ -10,6 +10,8 @@ mod remote_server;
 mod server_link;
 mod worker;
 
+pub(crate) use compile::validate;
+
 use std::{net::SocketAddr, sync::mpsc, thread::JoinHandle};
 
 use crate::{Error, Result, Subscription, client::worker::Command, services, spec::FlowSpec};
