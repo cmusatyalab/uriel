@@ -11,11 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install libclang and GStreamer
-        # libclang generates iceoryx2's bindings, and examples/h264 links GStreamer.
+      - name: Install libclang
+        # libclang generates iceoryx2's bindings.
         run: |
           sudo apt-get update
-          sudo apt-get install -y libclang-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+          sudo apt-get install -y libclang-dev
 
       - uses: dtolnay/rust-toolchain@stable
         with:

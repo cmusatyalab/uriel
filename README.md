@@ -101,7 +101,6 @@ Install it only as a static library, as above, so programs linked with it need n
 - `examples/c/hello`: the same in C, as four programs: a server, an engine, a client and a producer.
 - `examples/go/pipeline`: a camera, a motion filter and a detector in one process.
 - `examples/yolo`: object detection with YOLO, in Python.
-- `examples/h264`: engines that encode frames with H.264, and decode them.
 
 ## Developing
 
@@ -114,7 +113,7 @@ Install it only as a static library, as above, so programs linked with it need n
 | `examples/` | The examples above.                                                 |
 | `bench/`    | Benchmarks.                                                         |
 
-To build and test everything, install liburiel from source as above, and GStreamer's development files for `examples/h264` (`libgstreamer1.0-dev` and `libgstreamer-plugins-base1.0-dev` on Ubuntu). Then:
+To build and test everything, install liburiel from source as above. Then:
 
 ```sh
 cargo test --workspace                 # the Rust library; also regenerates the C header
