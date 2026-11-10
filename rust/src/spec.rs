@@ -92,7 +92,7 @@ pub struct EdgeSpec {
 }
 
 impl FlowSpec {
-    /// Checks the graph without a client or any servers: names, edges, cycles, joins, and that
+    /// Checks the graph without a client or any servers: names, edges, cycles, and that
     /// no edge leads from the remote server back to the device. Whether the engines are
     /// registered is not checked; [`Client::add_flow`](crate::Client::add_flow) does that, and
     /// runs this check first.

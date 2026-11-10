@@ -1078,6 +1078,39 @@ mod tests {
     }
 
     #[test]
+    fn remote_engine_takes_inputs_from_a_local_engine_and_a_producer() {
+        const FRAME: u8 = 7;
+        const TELEMETRY: u8 = 9;
+        let mut fixture = Offload::new();
+        let (encoder_name, gcs_name) = (unique("encoder"), unique("gcs"));
+        let mut encoder = serve(&mut fixture.local, &encoder_name);
+        let mut gcs = serve(&mut fixture.remote, &gcs_name);
+        let telemetry_name = unique("telemetry");
+        let mut telemetry = Producer::new(&telemetry_name, None, MAX_INPUT_SIZE).unwrap();
+        fixture.client.add_producer(&telemetry_name).unwrap();
+        let mut spec = fixture.spec(&encoder_name, &gcs_name);
+        spec.producers.push(ProducerSpec {
+            name: telemetry_name.clone(),
+            tokens: Some(ONE_TOKEN),
+        });
+        spec.edges.push(EdgeSpec {
+            from: telemetry_name,
+            to: gcs_name,
+            timeout: OFFER_TIMEOUT,
+        });
+        fixture.client.add_flow(FLOW, &spec).unwrap();
+
+        publish(&mut fixture.producer, FRAME);
+        assert_eq!(next_input(&mut encoder), FRAME);
+        encoder.forward(&[]).unwrap();
+        assert_eq!(next_input(&mut gcs), FRAME);
+        gcs.forward(&[]).unwrap();
+        publish(&mut telemetry, TELEMETRY);
+
+        assert_eq!(next_input(&mut gcs), TELEMETRY);
+    }
+
+    #[test]
     fn lost_remote_server_is_reported() {
         let mut fixture = Offload::new();
         let (filter_name, detector_name) = (unique("filter"), unique("detector"));

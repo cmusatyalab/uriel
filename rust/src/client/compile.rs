@@ -7,7 +7,6 @@
 use std::{collections::HashMap, time::Duration};
 
 use petgraph::{
-    Direction::Incoming,
     algo::toposort,
     graph::{DiGraph, EdgeReference, NodeIndex},
     visit::{Dfs, EdgeRef},
@@ -33,9 +32,6 @@ pub(super) const REMOTE_RTT_BOUND: Duration = Duration::from_secs(1);
 /// The token left over when every place that can hold one of a producer's inputs holds one, so
 /// that a newer input can still replace a waiting one ("Choosing C" in the design note).
 const SPARE_TOKENS: usize = 1;
-
-/// How many edges may lead to one engine: flows fan out but never join.
-const MAX_INCOMING_EDGES: usize = 1;
 
 /// A flow, split into the client's part and a part for each server that runs its engines.
 #[derive(Debug)]
@@ -159,14 +155,6 @@ pub(super) fn compile(
         }
         // Edges are added in order, so an edge's index in the graph is its id.
         graph.add_edge(from, to, edge.timeout);
-    }
-    for node in graph.node_indices() {
-        if graph.edges_directed(node, Incoming).count() > MAX_INCOMING_EDGES {
-            return Err(Error::InvalidArgument(format!(
-                "engine {:?} has more than one incoming edge; flows cannot join",
-                graph[node]
-            )));
-        }
     }
     let order = toposort(&graph, None).map_err(|cycle| {
         Error::InvalidArgument(format!(
@@ -727,19 +715,71 @@ mod tests {
     }
 
     #[test]
-    fn engine_with_two_incoming_edges_is_rejected() {
+    fn an_engine_can_have_several_incoming_edges() {
         let mut from_two_engines = cascade();
         from_two_engines.engines.push(engine("tracker"));
         from_two_engines
             .edges
+            .push(edge("camera", "tracker", TRACKER_TIMEOUT));
+        from_two_engines
+            .edges
             .push(edge("tracker", "detector", DETECTOR_TIMEOUT));
-        let mut from_producer_and_engine = cascade();
-        from_producer_and_engine
+
+        let compiled = compile(FLOW, &from_two_engines, REMOTE_CROSSING_CAPACITY).unwrap();
+
+        // Both edges into the detector are the server's, and each keeps its own pending slot.
+        let detector = NodeId(1);
+        let into_detector: Vec<EdgeId> = compiled.parts[&Location::Local]
+            .edges
+            .iter()
+            .filter(|edge| edge.to == detector)
+            .map(|edge| edge.id)
+            .collect();
+        assert_eq!(into_detector, vec![EdgeId(1), EdgeId(3)]);
+    }
+
+    #[test]
+    fn a_diamond_counts_its_join_once_and_each_edge_into_it() {
+        let mut diamond = cascade();
+        diamond.producers[0].tokens = None;
+        diamond
             .edges
             .push(edge("camera", "detector", DETECTOR_TIMEOUT));
 
-        assert!(rejects(&from_two_engines));
-        assert!(rejects(&from_producer_and_engine));
+        let compiled = compile(FLOW, &diamond, REMOTE_CROSSING_CAPACITY).unwrap();
+
+        // 2 engines, 3 edges, and a spare.
+        assert_eq!(compiled.producers[0].tokens, 6);
+        // The longer branch, through the filter, bounds the ticket.
+        assert_eq!(
+            compiled.producers[0].ticket_timeout,
+            engine_wait(FILTER_TIMEOUT) + engine_wait(DETECTOR_TIMEOUT)
+        );
+    }
+
+    #[test]
+    fn a_producer_and_a_local_engine_can_feed_one_remote_engine() {
+        // camera → filter (local) → detector (remote) ← telemetry
+        let mut spec = offload();
+        spec.producers.push(ProducerSpec {
+            name: String::from("telemetry"),
+            tokens: Some(TOKENS),
+        });
+        spec.edges
+            .push(edge("telemetry", "detector", DETECTOR_TIMEOUT));
+
+        let compiled = compile(FLOW, &spec, REMOTE_CROSSING_CAPACITY).unwrap();
+
+        // Each source crosses to the remote server on its own crossing, to the same engine.
+        let detector = NodeId(1);
+        let uplinks: Vec<&CompiledCrossing> = compiled
+            .crossings
+            .iter()
+            .filter(|crossing| crossing.location == Location::Remote)
+            .collect();
+        assert_eq!(uplinks.len(), 2);
+        assert!(uplinks.iter().all(|crossing| crossing.target == detector));
+        assert_eq!(compiled.parts[&Location::Remote].crossings.len(), 2);
     }
 
     #[test]
