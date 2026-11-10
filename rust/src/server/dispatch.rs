@@ -20,6 +20,7 @@ use iceoryx2::port::{
 };
 use iceoryx2::prelude::*;
 use iceoryx2_bb_container::string::String as _;
+use metrics::{Counter, Histogram, counter, histogram};
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -27,10 +28,10 @@ use crate::{
     Error, Result,
     events::EventPublisher,
     ipc::types::{
-        ClientEventHeader, Data, DerivedRecord, EngineName, EventRecord, InputHeader,
+        ClientEventHeader, Data, DerivedRecord, EngineName, EventKind, EventRecord, InputHeader,
         OutcomeRecord, PayloadType,
     },
-    naming,
+    metrics as uriel_metrics, naming,
     routing::{
         ids::{InputId, OfferId},
         server_router::{InstallFlow, ServerAction, ServerRouter},
@@ -72,6 +73,52 @@ fn bytes_of(data: Option<&Data>) -> &[u8] {
     data.map_or(&[], |data| &data.bytes)
 }
 
+/// The metrics of one engine, kept so that they are not looked up for every event.
+struct EngineMetrics {
+    inputs_received: Counter,
+    wait: Histogram,
+    processing_latency: Histogram,
+    results: Counter,
+    skipped: Counter,
+    timed_out: Counter,
+}
+
+impl EngineMetrics {
+    fn new(engine: &str) -> Self {
+        let engine = || (uriel_metrics::ENGINE_ID_LABEL, engine.to_owned());
+        let outcome = |outcome: &'static str| {
+            let labels = [engine(), (uriel_metrics::OUTCOME_LABEL, outcome.to_owned())];
+            counter!(uriel_metrics::ENGINE_OUTCOMES, &labels)
+        };
+        Self {
+            inputs_received: counter!(uriel_metrics::ENGINE_INPUTS_RECEIVED, &[engine()]),
+            wait: histogram!(uriel_metrics::ENGINE_WAIT, &[engine()]),
+            processing_latency: histogram!(uriel_metrics::ENGINE_PROCESSING_LATENCY, &[engine()]),
+            results: outcome("result"),
+            skipped: outcome("skipped"),
+            timed_out: outcome("timed_out"),
+        }
+    }
+
+    /// Records the event `record` of the engine.
+    fn record(&self, record: &EventRecord) {
+        match record.kind {
+            EventKind::Sent => {
+                self.inputs_received.increment(1);
+                if let Some(offered_at) = record.offered_at.as_option_ref() {
+                    self.wait
+                        .record(record.at.saturating_duration_since(*offered_at));
+                }
+            }
+            EventKind::Result => self.results.increment(1),
+            EventKind::Skipped => self.skipped.increment(1),
+            EventKind::TimedOut => self.timed_out.increment(1),
+            // The rest are not about how an engine's offers ended.
+            _ => {}
+        }
+    }
+}
+
 /// The server's ends of one engine's services.
 struct EnginePorts {
     inputs: Publisher<Svc, [u8], InputHeader>,
@@ -82,6 +129,7 @@ struct EnginePorts {
     outcome_ready: Listener<Svc>,
     derived: Subscriber<Svc, [u8], DerivedRecord>,
     events: EventPublisher,
+    metrics: EngineMetrics,
     /// The node of the engine's running process, as of the last check. A different node, or
     /// none, means that process stopped.
     instance: Option<UniqueNodeId>,
@@ -120,6 +168,7 @@ impl EnginePorts {
             outcome_ready,
             derived,
             events,
+            metrics: EngineMetrics::new(name),
             instance: None,
         })
     }
@@ -454,9 +503,13 @@ impl Dispatcher {
                     Ok(())
                 }
                 ServerAction::ToSubscribers { record, result } => {
-                    ports(&mut self.engines, &record.engine)
-                        .and_then(|ports| ports.publish(record, result.as_ref()))
+                    ports(&mut self.engines, &record.engine).and_then(|ports| {
+                        ports.metrics.record(&record);
+                        ports.publish(record, result.as_ref())
+                    })
                 }
+                ServerAction::Answered { engine, processing } => ports(&mut self.engines, &engine)
+                    .map(|ports| ports.metrics.processing_latency.record(processing)),
             };
             if let Err(e) = done {
                 first_error.get_or_insert(e);
@@ -502,6 +555,8 @@ fn split_outcome(outcome: &OutcomeRecord, payload: &[u8]) -> Option<(Option<Data
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
+
+    use metrics_util::debugging::{DebugValue, DebuggingRecorder, Snapshotter};
 
     use super::*;
     use crate::{
@@ -601,6 +656,76 @@ mod tests {
         std::iter::from_fn(|| dispatcher.poll_client_event())
             .map(|event| event.record.kind)
             .collect()
+    }
+
+    /// Each recorded metric of an engine, by its name and `outcome` label.
+    fn recorded_metrics(
+        snapshotter: &Snapshotter,
+    ) -> HashMap<(String, Option<String>), DebugValue> {
+        snapshotter
+            .snapshot()
+            .into_vec()
+            .into_iter()
+            .map(|(key, _, _, value)| {
+                let key = key.key();
+                let outcome = key
+                    .labels()
+                    .find(|label| label.key() == uriel_metrics::OUTCOME_LABEL)
+                    .map(|label| label.value().to_owned());
+                ((key.name().to_owned(), outcome), value)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn engine_metrics_follow_how_its_inputs_end() {
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
+        let now = Instant::now();
+        metrics::with_local_recorder(&recorder, || {
+            let mut fixture = Fixture::new();
+            // Answered.
+            fixture.accept_frame(now);
+            fixture.engine.poll_input().unwrap();
+            fixture.engine.forward(&RESULT).unwrap();
+            fixture.dispatcher.poll(now).unwrap();
+            // Never answered.
+            send_frame(&mut fixture.dispatcher, fixture.session, 2, now).unwrap();
+            fixture.dispatcher.poll(now + 2 * TIMEOUT).unwrap();
+            // Replaced on the client, before it was sent.
+            fixture
+                .dispatcher
+                .crossing_skipped(
+                    fixture.session,
+                    OfferId {
+                        session: CLIENT_SESSION,
+                        edge: CROSSING,
+                        seq: 3,
+                    },
+                    InputId::default(),
+                    now,
+                )
+                .unwrap();
+        });
+
+        let metrics = recorded_metrics(&snapshotter);
+        let value = |name: &str, outcome: Option<&str>| {
+            &metrics[&(name.to_owned(), outcome.map(str::to_owned))]
+        };
+        let samples = |name: &str| match value(name, None) {
+            DebugValue::Histogram(samples) => samples.len(),
+            other => panic!("{name} is not a histogram: {other:?}"),
+        };
+        let outcomes = |outcome| value(uriel_metrics::ENGINE_OUTCOMES, Some(outcome));
+        assert_eq!(
+            value(uriel_metrics::ENGINE_INPUTS_RECEIVED, None),
+            &DebugValue::Counter(2)
+        );
+        assert_eq!(samples(uriel_metrics::ENGINE_WAIT), 2);
+        assert_eq!(samples(uriel_metrics::ENGINE_PROCESSING_LATENCY), 1);
+        assert_eq!(outcomes("result"), &DebugValue::Counter(1));
+        assert_eq!(outcomes("timed_out"), &DebugValue::Counter(1));
+        assert_eq!(outcomes("skipped"), &DebugValue::Counter(1));
     }
 
     #[test]

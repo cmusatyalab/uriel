@@ -4,19 +4,9 @@
 //! The server keeps its certificate in its identity directory, so that it stays the same across
 //! restarts. Give clients a copy of it. The server stops on Ctrl-C or SIGTERM.
 //!
-//! The server also serves Prometheus metrics: its engines' (see `metrics`), and Uriel's own
-//! (see `uriel::metrics`).
+//! The server also serves Prometheus metrics, its engines' among them (see `uriel::metrics`).
 
-mod metrics;
-
-use std::{
-    net::SocketAddr,
-    path::PathBuf,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-};
+use std::{net::SocketAddr, path::PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -91,16 +81,9 @@ fn main() -> Result<()> {
         args.identity_dir.join(CERTIFICATE_FILE).display(),
     );
 
-    let stop_watching = Arc::new(AtomicBool::new(false));
-    let watchers = metrics::watch_engines(&args.engines, &stop_watching);
     eprintln!("metrics on http://{}/metrics", args.metrics_listen);
 
     signals.forever().next();
     eprintln!("stopping");
-    stop_watching.store(true, Ordering::Relaxed);
-    for watcher in watchers {
-        // A watcher that panicked has nothing left to stop.
-        let _ = watcher.join();
-    }
     Ok(())
 }

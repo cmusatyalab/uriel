@@ -1,6 +1,6 @@
-//! Prometheus metrics of what only Uriel knows: how a client uses its tokens and crossings, and
-//! how its connection to the remote server is doing. The events about inputs show the rest, and
-//! apps record metrics from them themselves.
+//! Prometheus metrics of how a client uses its tokens and crossings, how its connection to the
+//! remote server is doing, and how a server's engines are doing. The events about inputs show the
+//! rest, e.g. the results themselves, and apps record metrics from them themselves.
 //!
 //! Uriel records them through the [`metrics`] facade, so they cost almost nothing unless the
 //! app installs a recorder. [`serve`] installs one that serves them to Prometheus. A Rust app
@@ -17,8 +17,17 @@
 //! - `uriel_remote_lost_packets_total`, `uriel_remote_congestion_events_total`.
 //! - `uriel_remote_sent_bytes_total`, `uriel_remote_received_bytes_total`: UDP bytes.
 //!
+//! - `uriel_engine_inputs_received_total`: inputs a server sent to the engine.
+//! - `uriel_engine_outcomes_total`, by `outcome`: how the engine's offers ended, `result`,
+//!   `skipped` (replaced by a newer input before it was sent) or `timed_out`.
+//! - `uriel_engine_processing_latency_seconds`: from sending an input to the engine to its
+//!   result, including a result that came after its offer timed out.
+//! - `uriel_engine_wait_seconds`: from the offer to sending the input, i.e. how long the input
+//!   waited for the engine to be free.
+//!
 //! The token metrics have `flow` and `producer_id` labels, the crossing metrics `flow`,
-//! `location` and `targets` (the crossing's engines), and the remote metrics `server`.
+//! `location` and `targets` (the crossing's engines), the remote metrics `server`, and the engine
+//! metrics `engine_id`. Each engine's metrics are recorded by the server that serves it.
 
 use std::net::SocketAddr;
 
@@ -37,6 +46,12 @@ pub(crate) const REMOTE_LOST_PACKETS: &str = "uriel_remote_lost_packets_total";
 pub(crate) const REMOTE_CONGESTION_EVENTS: &str = "uriel_remote_congestion_events_total";
 pub(crate) const REMOTE_SENT_BYTES: &str = "uriel_remote_sent_bytes_total";
 pub(crate) const REMOTE_RECEIVED_BYTES: &str = "uriel_remote_received_bytes_total";
+pub(crate) const ENGINE_INPUTS_RECEIVED: &str = "uriel_engine_inputs_received_total";
+pub(crate) const ENGINE_OUTCOMES: &str = "uriel_engine_outcomes_total";
+pub(crate) const ENGINE_PROCESSING_LATENCY: &str = "uriel_engine_processing_latency_seconds";
+pub(crate) const ENGINE_WAIT: &str = "uriel_engine_wait_seconds";
+pub(crate) const ENGINE_ID_LABEL: &str = "engine_id";
+pub(crate) const OUTCOME_LABEL: &str = "outcome";
 
 /// Histogram buckets, in seconds, for apps that record latencies through the same recorder: from
 /// a fast engine on a GPU to one behind a slow link.

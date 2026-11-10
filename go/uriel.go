@@ -139,8 +139,8 @@ func InitLog(filter string) error {
 
 // ServeMetrics serves the metrics of Uriel's clients and servers in this process to Prometheus, at
 // http://<addr>/metrics, e.g. "0.0.0.0:9464": how producers use their tokens, how full crossings
-// are, and how the connection to the remote server is doing. Call it once, before creating clients
-// and servers.
+// are, how the connection to the remote server is doing, and how a server's engines are doing. Call
+// it once, before creating clients and servers.
 func ServeMetrics(addr string) error {
 	cAddr := C.CString(addr)
 	defer C.free(unsafe.Pointer(cAddr))

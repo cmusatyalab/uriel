@@ -2305,7 +2305,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "metrics",
  "signal-hook",
  "uriel",
 ]

@@ -91,6 +91,12 @@ pub(crate) enum ServerAction<T> {
         record: EventRecord,
         result: Option<T>,
     },
+    /// The engine `engine` answered an input `processing` after it was delivered, for the
+    /// engine's metrics.
+    Answered {
+        engine: EngineName,
+        processing: Duration,
+    },
 }
 
 /// An input kept on an edge, so the server can deliver it, and forward it after `Forward`.
@@ -136,8 +142,9 @@ struct EngineState {
     turns: VecDeque<EdgeKey>,
     /// Inputs delivered to the engine whose outcome has not arrived. An input counts here even
     /// after its offer timed out, because it still takes a place in the engine's input buffer. It
-    /// leaves when its outcome arrives, or when the server learns that no outcome will come.
-    delivered: HashSet<OfferId>,
+    /// leaves when its outcome arrives, or when the server learns that no outcome will come. Each
+    /// has the time it was delivered.
+    delivered: HashMap<OfferId, Timestamp>,
 }
 
 /// Routing of every flow installed on one server.
@@ -494,9 +501,9 @@ impl<T: Clone> ServerRouter<T> {
             )));
         };
         let offer = outcome.offer;
-        if !engine_state.delivered.remove(&offer) {
+        let Some(delivered_at) = engine_state.delivered.remove(&offer) else {
             return Ok(());
-        }
+        };
 
         // The flow may have been removed while the engine worked on the input.
         if let Some(flow) = self.flows.get_mut(&offer.session) {
@@ -556,6 +563,10 @@ impl<T: Clone> ServerRouter<T> {
             if let Some(offered_at) = offered_at {
                 record = record.offered_at(offered_at);
             }
+            self.actions.push_back(ServerAction::Answered {
+                engine,
+                processing: ended_at.saturating_duration_since(delivered_at),
+            });
             publish(&mut self.actions, offer.session, record, result, to_client);
         }
         self.settle(now);
@@ -577,7 +588,7 @@ impl<T: Clone> ServerRouter<T> {
                 "engine {engine:?} does not exist"
             )));
         };
-        if engine_state.delivered.remove(&offer) {
+        if engine_state.delivered.remove(&offer).is_some() {
             self.lose(offer, now);
             self.settle(now);
         }
@@ -596,7 +607,11 @@ impl<T: Clone> ServerRouter<T> {
             )));
         };
         engine_state.turns.clear();
-        let delivered: Vec<OfferId> = engine_state.delivered.drain().collect();
+        let delivered: Vec<OfferId> = engine_state
+            .delivered
+            .drain()
+            .map(|(offer, _)| offer)
+            .collect();
         for offer in delivered {
             self.lose(offer, now);
         }
@@ -664,7 +679,7 @@ impl<T: Clone> ServerRouter<T> {
                     .and_then(|flow| flow.edges.get_mut(&edge))
                     .and_then(|edge| edge.state.pull(now));
                 if let Some(offer) = pulled {
-                    state.delivered.insert(offer);
+                    state.delivered.insert(offer, Timestamp::now());
                 }
             }
         }
@@ -815,26 +830,27 @@ mod tests {
 
     fn steps(router: &mut ServerRouter<u32>) -> Vec<Step> {
         std::iter::from_fn(|| router.poll_action())
-            .map(|action| match action {
+            .filter_map(|action| match action {
                 ServerAction::Deliver {
                     engine,
                     offer,
                     data,
                     ..
-                } => Step::Deliver {
+                } => Some(Step::Deliver {
                     engine: engine.to_string(),
                     offer,
                     data,
-                },
-                ServerAction::ToClient { record, .. } => Step::Client {
+                }),
+                ServerAction::ToClient { record, .. } => Some(Step::Client {
                     kind: record.kind,
                     children: record.children.as_slice().to_vec(),
-                },
-                ServerAction::ToSubscribers { record, .. } => Step::Subscribers {
+                }),
+                ServerAction::ToSubscribers { record, .. } => Some(Step::Subscribers {
                     kind: record.kind,
                     engine: record.engine.to_string(),
                     children: record.children.as_slice().to_vec(),
-                },
+                }),
+                ServerAction::Answered { .. } => None,
             })
             .collect()
     }
@@ -1350,6 +1366,52 @@ mod tests {
             TWO
         );
         assert!(delivered(&third).is_empty());
+    }
+
+    /// How long the engine took to answer, for each input it answered since the last call.
+    fn answered(router: &mut ServerRouter<u32>) -> Vec<(String, Duration)> {
+        std::iter::from_fn(|| router.poll_action())
+            .filter_map(|action| match action {
+                ServerAction::Answered { engine, processing } => {
+                    Some((engine.to_string(), processing))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn answered_input_reports_how_long_the_engine_took() {
+        const PROCESSING: Duration = Duration::from_millis(5);
+        let now = Instant::now();
+        let (mut router, session) = installed(ONE);
+        let offer = only_delivery(&accept(&mut router, session, CROSSING, 1, now));
+        std::thread::sleep(PROCESSING);
+
+        router
+            .outcome(DETECTOR, &forward(offer, 1), None, None, now)
+            .unwrap();
+
+        let [(engine, processing)] = &answered(&mut router)[..] else {
+            panic!("expected the one answer to be reported");
+        };
+        assert_eq!(engine, DETECTOR);
+        assert!(*processing >= PROCESSING, "{processing:?}");
+    }
+
+    #[test]
+    fn late_outcome_still_reports_how_long_the_engine_took() {
+        let now = Instant::now();
+        let (mut router, session) = installed(ONE);
+        let offer = only_delivery(&accept(&mut router, session, CROSSING, 1, now));
+        router.tick(now + TIMEOUT);
+        steps(&mut router);
+
+        router
+            .outcome(DETECTOR, &forward(offer, 1), None, None, now + TIMEOUT)
+            .unwrap();
+
+        assert_eq!(answered(&mut router).len(), ONE);
     }
 
     #[test]
