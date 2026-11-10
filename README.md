@@ -128,7 +128,7 @@ Install liburiel again whenever the Rust library changes, before testing the Go 
 The Rust crate and the Python package share one version. To release one:
 
 1. Set it in `rust/Cargo.toml` (e.g. `0.2.0`, or `0.2.0-rc1` for a release candidate) and in `python/pyproject.toml` (`0.2.0`, or `0.2.0rc1`).
-2. Update the lock files: `cargo update --workspace` and `(cd python && uv lock)`.
+2. Update the lock files: `cargo update --workspace`, `(cd android/uniffi && cargo update -p uriel)` (it is built on its own, so it has its own lock file) and `(cd python && uv lock)`.
 3. Commit, push, and push the tag `v0.2.0` (or `v0.2.0-rc1`).
 
 The tag starts `.github/workflows/release.yml`. It publishes the Python package to PyPI (a release candidate to TestPyPI), puts liburiel and the Python files on a GitHub release, and tags the Go module `go/v0.2.0`.
