@@ -1,6 +1,6 @@
 #!/bin/bash
-# Builds a release's files for one architecture, in a manylinux_2_28 container, so that they work
-# on any Linux with glibc 2.28 or newer:
+# Builds a release's files for one architecture, in a manylinux2014 container, so that they work
+# on any Linux with glibc 2.17 or newer:
 #
 #   dist/lib/liburiel-<version>-linux-<arch>.tar.gz   the static library, header and uriel.pc
 #   dist/python/uriel-<version>-*.whl                  the Python wheel
@@ -9,7 +9,7 @@
 # .github/workflows/release.yml runs it from the repository's root:
 #
 #   docker run --rm -v "$PWD:/src" -w /src -e VERSION -e ARCH -e RUST_VERSION -e CARGO_C_VERSION \
-#       -e SDIST quay.io/pypa/manylinux_2_28_<arch> .github/scripts/build-release.sh
+#       -e SDIST quay.io/pypa/manylinux2014_<arch> .github/scripts/build-release.sh
 set -euo pipefail
 
 : "${VERSION:?}" "${ARCH:?}" "${RUST_VERSION:?}" "${CARGO_C_VERSION:?}"
@@ -18,8 +18,6 @@ SDIST=${SDIST:-false}
 PYTHON=/opt/python/cp312-cp312/bin/python
 NAME="liburiel-$VERSION-linux-$ARCH"
 
-# libclang generates the bindings of iceoryx2, Uriel's shared memory transport.
-dnf install -y --quiet clang-devel
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --quiet --profile minimal --default-toolchain "$RUST_VERSION"
 export PATH="$HOME/.cargo/bin:$PATH"
@@ -46,9 +44,9 @@ cp LICENSE "$stage/$NAME/"
 tar -czf "dist/lib/$NAME.tar.gz" -C "$stage" "$NAME"
 
 cd python
-# Tag the wheel manylinux_2_28 and check that it is: uv asks maturin for no tag (linux_<arch>),
+# Tag the wheel manylinux2014 and check that it is: uv asks maturin for no tag (linux_<arch>),
 # which PyPI does not accept.
-export MATURIN_PEP517_ARGS="--compatibility manylinux_2_28"
+export MATURIN_PEP517_ARGS="--compatibility manylinux2014"
 uv build --python "$PYTHON" --wheel --out-dir ../dist/python
 if [ "$SDIST" = true ]; then
     uv build --python "$PYTHON" --sdist --out-dir ../dist/python

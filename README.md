@@ -12,7 +12,7 @@ Uriel is written in Rust and has bindings for Python, Go and C. It runs on Linux
 pip install uriel
 ```
 
-This needs Python 3.11 or newer, and Linux on x86_64 or aarch64 with glibc 2.28 or newer.
+This needs Python 3.11 or newer, and Linux on x86_64 or aarch64 with glibc 2.17 or newer.
 
 ### Go and C
 
@@ -86,7 +86,7 @@ CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build ./...
 
 ### From source
 
-Building liburiel needs Rust, libclang, pkg-config and [cargo-c](https://github.com/lu-zero/cargo-c) (`cargo install cargo-c`). From a checkout:
+Building liburiel needs Rust, pkg-config and [cargo-c](https://github.com/lu-zero/cargo-c) (`cargo install cargo-c`). From a checkout:
 
 ```sh
 cargo cinstall --release -p uriel --library-type staticlib --prefix ~/.local --libdir lib
