@@ -1,6 +1,6 @@
 [project]
 name = "uriel"
-version = "0.3.1"
+version = "0.4.0"
 description = "Python bindings for Uriel, through its C ABI"
 readme = "README.md"
 license = "Apache-2.0"
