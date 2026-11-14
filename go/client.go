@@ -171,6 +171,37 @@ func (c *Client) RemoveFlow(name string) error {
 	})
 }
 
+// IsLocalConnected reports whether the client is connected to its local server: the server's
+// process was running when the client last looked, which it does about once a second. It never
+// blocks.
+func (c *Client) IsLocalConnected() (bool, error) {
+	return c.connected(func(connected *C.bool) C.uriel_status_t {
+		return C.uriel_client_is_local_connected(c.handle, connected)
+	})
+}
+
+// IsRemoteConnected reports whether the client is connected to its remote server. It is always
+// false for a client without one ([WithRemoteServer]), and until the first connection is made. A
+// server that closes the connection is noticed at once; one that crashes or becomes unreachable,
+// after the connection's idle timeout of about 5 seconds. It never blocks.
+func (c *Client) IsRemoteConnected() (bool, error) {
+	return c.connected(func(connected *C.bool) C.uriel_status_t {
+		return C.uriel_client_is_remote_connected(c.handle, connected)
+	})
+}
+
+// connected calls f on the client, which writes whether a server is connected.
+func (c *Client) connected(f func(*C.bool) C.uriel_status_t) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.handle == nil {
+		return false, failure(ErrClosed)
+	}
+	var connected C.bool
+	err := call(func() C.uriel_status_t { return f(&connected) })
+	return bool(connected), err
+}
+
 // Close destroys the client, which removes its flows.
 func (c *Client) Close() error {
 	c.mu.Lock()

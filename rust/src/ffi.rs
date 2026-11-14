@@ -528,6 +528,57 @@ pub unsafe extern "C" fn uriel_client_remove_flow(
     Status::from(unsafe { (|| handle_arg(client)?.remove_flow(str_arg(name)?))() })
 }
 
+/// Writes whether the client is connected to its local server to `*connected`: the server's
+/// process was running when the client last looked, which it does about once a second. The call
+/// never blocks.
+///
+/// # Safety
+/// `client` must be a live handle; `connected` must be valid for writes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn uriel_client_is_local_connected(
+    client: *mut Client,
+    connected: *mut bool,
+) -> Status {
+    unsafe { write_connected(client, connected, Client::is_local_connected) }
+}
+
+/// Writes whether the client is connected to its remote server to `*connected`: false for a
+/// client without one, and until the first connection is made. A lost connection is noticed at
+/// once if the server closed it, or when its idle timeout of about 5 seconds runs out if the
+/// server crashed or cannot be reached. The call never blocks.
+///
+/// # Safety
+/// `client` must be a live handle; `connected` must be valid for writes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn uriel_client_is_remote_connected(
+    client: *mut Client,
+    connected: *mut bool,
+) -> Status {
+    unsafe { write_connected(client, connected, Client::is_remote_connected) }
+}
+
+/// Writes `is_connected(client)` to `*connected`.
+///
+/// # Safety
+/// As for [`uriel_client_is_local_connected`].
+unsafe fn write_connected(
+    client: *mut Client,
+    connected: *mut bool,
+    is_connected: fn(&Client) -> bool,
+) -> Status {
+    let result = unsafe {
+        (|| {
+            let client = handle_arg(client)?;
+            let connected = connected
+                .as_mut()
+                .ok_or_else(|| Error::InvalidArgument("null output pointer".into()))?;
+            *connected = is_connected(client);
+            Ok(())
+        })()
+    };
+    Status::from(result)
+}
+
 // --- Server ---
 
 /// How to create a server, beyond its name. New options are added as new setters, so
@@ -1347,6 +1398,39 @@ mod tests {
             unsafe { uriel_client_add_flow(client, c"flow".as_ptr(), c"[[edges]".as_ptr()) };
 
         assert_eq!(status, Status::ErrInvalid);
+        assert_eq!(unsafe { uriel_client_destroy(client) }, Status::Ok);
+    }
+
+    #[test]
+    fn client_without_servers_is_not_connected() {
+        let name = CString::new(unique("client")).unwrap();
+        let server = CString::new(unique("server")).unwrap();
+        let mut client = ptr::null_mut();
+        let created = unsafe {
+            uriel_client_create(name.as_ptr(), server.as_ptr(), ptr::null(), &mut client)
+        };
+        assert_eq!(created, Status::Ok);
+
+        let (mut local, mut remote) = (true, true);
+        let statuses = unsafe {
+            [
+                uriel_client_is_local_connected(client, &mut local),
+                uriel_client_is_remote_connected(client, &mut remote),
+                uriel_client_is_local_connected(client, ptr::null_mut()),
+                uriel_client_is_remote_connected(ptr::null_mut(), &mut remote),
+            ]
+        };
+
+        assert_eq!(
+            statuses,
+            [
+                Status::Ok,
+                Status::Ok,
+                Status::ErrInvalid,
+                Status::ErrInvalid
+            ]
+        );
+        assert!(!local && !remote);
         assert_eq!(unsafe { uriel_client_destroy(client) }, Status::Ok);
     }
 

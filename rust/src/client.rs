@@ -13,7 +13,14 @@ mod worker;
 pub(crate) use compile::validate;
 pub(crate) use remote_server::validate_addr;
 
-use std::{sync::mpsc, thread::JoinHandle};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
+    thread::JoinHandle,
+};
 
 use crate::{Error, Result, Subscription, client::worker::Command, services, spec::FlowSpec};
 
@@ -49,11 +56,27 @@ impl RemoteServerConfig {
     }
 }
 
+/// Whether the client is connected to each server, as the client thread last saw it. The thread
+/// writes it on every pass of its loop, so the [`Client`] handle reads it without a round trip.
+#[derive(Debug, Default)]
+struct Connections {
+    local: AtomicBool,
+    remote: AtomicBool,
+}
+
+impl Connections {
+    fn set(&self, local: bool, remote: bool) {
+        self.local.store(local, Ordering::Relaxed);
+        self.remote.store(remote, Ordering::Relaxed);
+    }
+}
+
 /// Bridges local producers to the servers that run a flow's engines.
 #[derive(Debug)]
 pub struct Client {
     commands: Option<mpsc::Sender<Command>>,
     thread: Option<JoinHandle<Result<()>>>,
+    connections: Arc<Connections>,
 }
 
 impl Client {
@@ -69,11 +92,32 @@ impl Client {
             }
             validate_addr(&remote.addr)?;
         }
-        let (commands, thread) = worker::spawn(name, local_server, remote)?;
+        let connections = Arc::new(Connections::default());
+        let (commands, thread) =
+            worker::spawn(name, local_server, remote, Arc::clone(&connections))?;
         Ok(Self {
             commands: Some(commands),
             thread: Some(thread),
+            connections,
         })
+    }
+
+    /// Whether the client is connected to its local server: the server's process was running when
+    /// the client last looked, which it does about once a second. A server that stops is noticed
+    /// within about a second; one that restarts in between is still connected, though its flows'
+    /// offers end with [`EventKind::Disconnected`](crate::EventKind::Disconnected). It never
+    /// blocks.
+    pub fn is_local_connected(&self) -> bool {
+        self.connections.local.load(Ordering::Relaxed)
+    }
+
+    /// Whether the client is connected to its remote server: the QUIC connection is up. Always
+    /// false for a client without a remote server, and until the first connection is made. A
+    /// server that closes the connection is noticed at once; one that crashes or becomes
+    /// unreachable is noticed when the connection's idle timeout runs out, about 5 seconds after
+    /// the server was last heard from. It never blocks.
+    pub fn is_remote_connected(&self) -> bool {
+        self.connections.remote.load(Ordering::Relaxed)
     }
 
     /// Starts taking inputs from the local producer `name`.
@@ -1158,6 +1202,48 @@ mod tests {
         let created = Client::new(&unique("client"), &unique("server"), Some(remote));
 
         assert!(matches!(created, Err(Error::InvalidArgument(_))));
+    }
+
+    /// Waits until `done`, or fails the test after `WAIT`.
+    fn wait_until(mut done: impl FnMut() -> bool) {
+        let deadline = Instant::now() + WAIT;
+        while !done() {
+            assert!(Instant::now() < deadline, "timed out");
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn local_connection_follows_the_server() {
+        let server_name = unique("server");
+        let client = Client::new(&unique("client"), &server_name, None).unwrap();
+        assert!(!client.is_local_connected());
+        assert!(!client.is_remote_connected());
+
+        let server = Server::new(&server_name, None, None).unwrap();
+        wait_until(|| client.is_local_connected());
+
+        drop(server);
+        wait_until(|| !client.is_local_connected());
+    }
+
+    #[test]
+    fn running_local_server_is_connected_once_the_client_is_created() {
+        let fixture = Fixture::new();
+
+        assert!(fixture.client.is_local_connected());
+    }
+
+    #[test]
+    fn remote_connection_follows_the_server() {
+        let fixture = Offload::new();
+        wait_until(|| fixture.client.is_remote_connected());
+        assert!(fixture.client.is_local_connected());
+
+        let Offload { remote, client, .. } = fixture;
+        drop(remote);
+
+        wait_until(|| !client.is_remote_connected());
     }
 
     #[test]

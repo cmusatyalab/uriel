@@ -244,6 +244,39 @@ def test_client_takes_a_remote_server_and_a_crossing_capacity():
             pass
 
 
+def wait_until(done, timeout: float = 5.0) -> None:
+    deadline = time.monotonic() + timeout
+    while not done():
+        assert time.monotonic() < deadline, "timed out"
+        time.sleep(0.005)
+
+
+def test_client_tells_whether_it_is_connected_to_each_server():
+    local_name = unique("local")
+    with uriel.Server(unique("server"), bind_addr="127.0.0.1:0") as remote_server:
+        remote = uriel.RemoteServer(
+            f"127.0.0.1:{remote_server.remote_port}", remote_server.certificate
+        )
+        with uriel.Client(unique("client"), local_name, remote=remote) as client:
+            assert not client.is_local_connected()
+            wait_until(client.is_remote_connected)
+            with uriel.Server(local_name):
+                wait_until(client.is_local_connected)
+            wait_until(lambda: not client.is_local_connected())
+
+
+def test_client_without_a_remote_server_is_not_remote_connected(fixture):
+    assert fixture.client.is_local_connected()
+    assert not fixture.client.is_remote_connected()
+
+
+def test_closed_client_cannot_tell_whether_it_is_connected():
+    client = uriel.Client(unique("client"), unique("local"))
+    client.close()
+    with pytest.raises(uriel.ClosedError):
+        client.is_local_connected()
+
+
 def test_negative_crossing_capacity_is_invalid():
     remote = uriel.RemoteServer("127.0.0.1:4433", b"", crossing_capacity=-1)
     with pytest.raises(uriel.InvalidArgumentError):

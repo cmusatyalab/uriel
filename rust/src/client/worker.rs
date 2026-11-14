@@ -41,7 +41,7 @@ use uuid::Uuid;
 use crate::{
     Error, Result,
     client::{
-        RemoteServerConfig,
+        Connections, RemoteServerConfig,
         compile::compile,
         local_server::LocalServer,
         producers::{Producers, ReceivedInput},
@@ -206,6 +206,8 @@ struct Worker {
     remote_crossing_capacity: usize,
     flows: HashMap<FlowName, ClientFlow>,
     next_server_check: Instant,
+    /// Where the thread tells the [`Client`](super::Client) handle whether it is connected.
+    connections: Arc<Connections>,
 }
 
 /// Starts the thread of the client `name`, which talks to the local server `local_server`, and to
@@ -215,6 +217,7 @@ pub(super) fn spawn(
     name: &str,
     local_server: &str,
     remote: Option<RemoteServerConfig>,
+    connections: Arc<Connections>,
 ) -> Result<(mpsc::Sender<Command>, JoinHandle<Result<()>>)> {
     let (started_tx, started_rx) = mpsc::channel();
     let (command_tx, command_rx) = mpsc::channel();
@@ -225,7 +228,7 @@ pub(super) fn spawn(
             // Every event the thread logs names the client.
             let _span = info_span!("client", name = %name).entered();
             // Created inside the thread: iceoryx2 ports cannot be moved between threads.
-            let worker = match Worker::new(&name, &local_server, remote) {
+            let worker = match Worker::new(&name, &local_server, remote, Arc::clone(&connections)) {
                 Ok(worker) => {
                     let _ = started_tx.send(Ok(()));
                     worker
@@ -236,6 +239,8 @@ pub(super) fn spawn(
                 }
             };
             let stopped = worker.run(&command_rx);
+            // Nothing tells the handle about the servers any more.
+            connections.set(false, false);
             if let Err(e) = &stopped {
                 error!(error = %e, "client thread stopped");
             }
@@ -258,7 +263,14 @@ pub(super) fn spawn(
 }
 
 impl Worker {
-    fn new(name: &str, local_server: &str, remote: Option<RemoteServerConfig>) -> Result<Self> {
+    /// Creates the thread's state, and looks for the local server once, so that a client created
+    /// while its local server runs is connected to it at once.
+    fn new(
+        name: &str,
+        local_server: &str,
+        remote: Option<RemoteServerConfig>,
+        connections: Arc<Connections>,
+    ) -> Result<Self> {
         let node = NodeBuilder::new()
             .name(&naming::client_node(name)?)
             .create::<Svc>()
@@ -273,7 +285,7 @@ impl Worker {
             servers.insert(Location::Remote, Box::new(server));
             remote_crossing_capacity = remote.crossing_capacity;
         }
-        Ok(Self {
+        let mut worker = Self {
             node,
             producers: Producers::default(),
             relays: Relays::default(),
@@ -281,7 +293,26 @@ impl Worker {
             remote_crossing_capacity,
             flows: HashMap::new(),
             next_server_check: Instant::now(),
-        })
+            connections,
+        };
+        // No flow is installed yet, so this only finds whether the servers can be reached.
+        let now = Instant::now();
+        worker.check_servers(now);
+        worker.next_server_check = now + SERVER_CHECK_INTERVAL;
+        worker.publish_connections();
+        Ok(worker)
+    }
+
+    /// Tells the [`Client`](super::Client) handle whether each server is connected, as of the
+    /// last events and check.
+    fn publish_connections(&self) {
+        let connected = |location| {
+            self.servers
+                .get(&location)
+                .is_some_and(|server| server.is_connected())
+        };
+        self.connections
+            .set(connected(Location::Local), connected(Location::Remote));
     }
 
     /// Runs until the command channel closes, then removes the client's flows from the servers.
@@ -322,6 +353,7 @@ impl Worker {
                 self.next_server_check = now + SERVER_CHECK_INTERVAL;
             }
             self.carry_out();
+            self.publish_connections();
             for flow in self.flows.values() {
                 flow.metrics.record(&flow.router);
             }

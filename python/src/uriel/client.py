@@ -95,3 +95,20 @@ class Client(LockedHandle):
     def remove_flow(self, name: str) -> None:
         """Removes the flow `name`."""
         self._call(lib.uriel_client_remove_flow, cstr(name))
+
+    def is_local_connected(self) -> bool:
+        """Whether the client is connected to its local server: the server's process was running
+        when the client last looked, which it does about once a second. It never blocks."""
+        return self._connected(lib.uriel_client_is_local_connected)
+
+    def is_remote_connected(self) -> bool:
+        """Whether the client is connected to its remote server. Always False for a client without
+        one, and until the first connection is made. A server that closes the connection is
+        noticed at once; one that crashes or becomes unreachable, after the connection's idle
+        timeout of about 5 seconds. It never blocks."""
+        return self._connected(lib.uriel_client_is_remote_connected)
+
+    def _connected(self, function) -> bool:
+        out = ffi.new("bool *")
+        self._call(function, out)
+        return bool(out[0])

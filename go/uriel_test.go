@@ -312,6 +312,80 @@ func TestClientTakesARemoteServerAndACrossingCapacity(t *testing.T) {
 	client.Close()
 }
 
+// waitUntil fails the test if done does not hold within 5 seconds.
+func waitUntil(t *testing.T, what string, done func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !done() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting until %s", what)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestClientTellsWhetherItIsConnectedToEachServer(t *testing.T) {
+	remoteServer, err := NewServer(unique("server"), WithBindAddr("127.0.0.1:0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer remoteServer.Close()
+	port, err := remoteServer.RemotePort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	certificate, err := remoteServer.Certificate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	localName := unique("local")
+	client, err := NewClient(unique("client"), localName, WithRemoteServer(fmt.Sprintf("127.0.0.1:%d", port), certificate))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	isLocal := func() bool {
+		connected, err := client.IsLocalConnected()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return connected
+	}
+
+	if isLocal() {
+		t.Error("connected to a local server that is not running")
+	}
+	waitUntil(t, "the remote server is connected", func() bool {
+		connected, err := client.IsRemoteConnected()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return connected
+	})
+	local, err := NewServer(localName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitUntil(t, "the local server is connected", isLocal)
+	local.Close()
+	waitUntil(t, "the local server is lost", func() bool { return !isLocal() })
+}
+
+func TestClientWithoutARemoteServerIsNotRemoteConnected(t *testing.T) {
+	client, err := NewClient(unique("client"), unique("local"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	connected, err := client.IsRemoteConnected()
+	if err != nil || connected {
+		t.Errorf("got %v, %v; want false, nil", connected, err)
+	}
+	client.Close()
+	if _, err := client.IsLocalConnected(); !errors.Is(err, ErrClosed) {
+		t.Errorf("got %v after Close; want ErrClosed", err)
+	}
+}
+
 func TestNegativeCrossingCapacityIsInvalid(t *testing.T) {
 	_, err := NewClient(unique("client"), unique("local"), WithRemoteServer("127.0.0.1:4433", nil), WithCrossingCapacity(-1))
 
